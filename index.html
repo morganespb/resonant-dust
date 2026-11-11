@@ -1,0 +1,1374 @@
+<!doctype html>
+<html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"></head><body><title>Resonant Dust</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: full-bleed WebGL stage, quiet mono HUD pinned to corners. Single dark look by choice. */
+:root{
+  --bg:#040303; --ink:#ece4df; --dim:#8a807c; --line:rgba(236,228,223,.13);
+  --panel:rgba(12,9,8,.62); --ember:#ff5a2e;
+  --display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  color-scheme:dark;
+}
+html,body{height:100%;background:var(--bg);color:var(--ink);overflow:hidden}
+body{font-family:var(--mono);font-size:12px}
+#stage{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+#stage:active{cursor:grabbing}
+.hud{position:fixed;z-index:2;transition:opacity .5s}
+body.hide-ui .hud{opacity:0;pointer-events:none}
+.top{top:calc(16px + env(safe-area-inset-top,0px));left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));display:flex;justify-content:space-between;align-items:flex-start;gap:12px;pointer-events:none}
+.top > *{pointer-events:auto}
+h1{font-family:var(--display);font-weight:600;font-size:clamp(20px,3vw,30px);letter-spacing:-.01em;margin:0;line-height:1}
+.move{color:var(--dim);margin-top:8px;letter-spacing:.08em;text-transform:uppercase;min-height:1.3em}
+.move b{color:var(--ink);font-weight:500}
+.bottom{bottom:calc(16px + env(safe-area-inset-bottom,0px));left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;justify-content:space-between;pointer-events:none}
+.bottom > *{pointer-events:auto}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 12px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.sources{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+button,.filebtn{font:inherit;color:var(--ink);background:transparent;border:1px solid var(--line);border-radius:4px;padding:7px 10px;cursor:pointer;letter-spacing:.03em}
+button:hover,.filebtn:hover{border-color:var(--dim)}
+button:focus-visible,.filebtn:focus-within,input:focus-visible,select:focus-visible,summary:focus-visible{outline:1px solid var(--ember);outline-offset:2px}
+button.on{border-color:var(--ember);color:#fff}
+.filebtn input{position:absolute;width:1px;height:1px;opacity:0}
+.status{color:var(--dim);margin-top:8px;max-width:46ch;min-height:1.4em}
+.meters{display:grid;grid-template-columns:auto 90px auto;gap:6px 10px;align-items:center}
+.meters .k{text-transform:uppercase;letter-spacing:.08em;color:var(--dim)}
+.bar{height:4px;background:var(--line);border-radius:2px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--ink)}
+.bar.hi i{background:var(--ember)}
+.meters .m{color:var(--dim);white-space:nowrap}
+.tweak{width:min(280px,calc(100vw - 32px));max-height:calc(100vh - 220px);overflow:auto}
+.tweak summary{cursor:pointer;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+.tweak[open] summary{margin-bottom:8px}
+.row{display:grid;grid-template-columns:1fr 120px;gap:8px;align-items:center;margin-top:6px}
+.row label{color:var(--dim)}
+input[type=range]{width:100%;accent-color:var(--ember)}
+select{font:inherit;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:3px}
+.how{margin-top:10px;color:var(--dim);line-height:1.5;border-top:1px solid var(--line);padding-top:8px}
+.how b{color:var(--ink);font-weight:500}
+.keys{color:var(--dim);text-align:right;line-height:1.6}
+.fps{color:var(--dim);margin-top:6px}
+@media (max-width:640px){.keys{display:none}.meters{grid-template-columns:auto 70px}.meters .m{display:none}}
+@media (prefers-reduced-motion:reduce){.hud{transition:none}}
+</style>
+
+<canvas id="stage" aria-label="A star of sand lit from inside, moving to music"></canvas>
+
+<div class="hud top">
+  <div>
+    <h1>Resonant Dust</h1>
+    <div class="move" id="move">III · <b>Eye</b></div>
+  </div>
+  <details class="box tweak" id="tweak">
+    <summary>Tweak</summary>
+    <div class="row"><label for="sBass">Bass push</label><input id="sBass" type="range" min="0" max="2" step="0.01" value="1"></div>
+    <div class="row"><label for="sCurl">Wind</label><input id="sCurl" type="range" min="0" max="2" step="0.01" value="1"></div>
+    <div class="row"><label for="sSun">Fire</label><input id="sSun" type="range" min="0" max="2.5" step="0.01" value="1"></div>
+    <div class="row"><label for="sSmoke">Smoke</label><input id="sSmoke" type="range" min="0" max="1.5" step="0.01" value="0.45"></div>
+    <div class="row"><label for="sShadow">Shadow depth</label><input id="sShadow" type="range" min="0" max="3" step="0.01" value="1"></div>
+    <div class="row"><label for="sRays">Light shafts</label><input id="sRays" type="range" min="0" max="2" step="0.01" value="1"></div>
+    <div class="row"><label for="sDof">Depth of field</label><input id="sDof" type="range" min="0" max="2" step="0.01" value="1"></div>
+    <div class="row"><label for="sTrail">Trails</label><input id="sTrail" type="range" min="0" max="0.9" step="0.01" value="0.35"></div>
+    <div class="row"><label for="sCount">Grains</label>
+      <select id="sCount"><option value="512">262k</option><option value="768" selected>590k</option><option value="1024">1M</option><option value="1448">2M</option></select></div>
+    <div class="fps" id="fps"></div>
+    <div class="how" id="xBox">
+      <b>Export film</b> — renders your loaded track frame by frame, so every frame is perfect even at 2M grains, whatever your computer's speed.
+      <div class="row"><label for="xRes">Size</label><select id="xRes"><option value="1080x1350" selected>1080×1350 (4:5)</option><option value="1080x1920">1080×1920 (9:16)</option><option value="1920x1080">1920×1080 (16:9)</option><option value="2160x2700">2160×2700 (4K 4:5)</option><option value="2160x3840">2160×3840 (4K 9:16)</option></select></div>
+      <div class="row"><label for="xFps">Frame rate</label><select id="xFps"><option value="30">30 fps</option><option value="60" selected>60 fps</option></select></div>
+      <div class="row"><label for="xDur">Seconds</label><select id="xDur"><option value="15">15 s</option><option value="30" selected>30 s</option><option value="60">60 s</option><option value="0">whole track</option></select></div>
+      <div class="row"><label for="xStart">Start at (s)</label><input id="xStart" type="number" min="0" step="1" value="0" style="font:inherit;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:3px;width:100%"></div>
+      <div style="margin-top:8px;display:flex;gap:6px"><button id="bExport" type="button">Render film</button><button id="bCancel" type="button" hidden>Cancel</button></div>
+    </div>
+    <div class="how">
+      Every particle is simulated on the GPU and settles into hidden figures: dancers, a kissing pair, wings, a hand.
+      Each frame the particles are poured into a 3D grid and every pixel marches a ray through it, so they read as smoke: lit by a cold key light and by the fire, shadowed by themselves.
+      The fire lives in the smoke's dense core, so you see it through the smoke in front of it.<br>
+      <b>Kick</b> flashes the fire. <b>Mids</b> and <b>bass</b> make the smoke roll faster. <b>Highs</b> heat the fire. Quiet parts gather it in; a drop is a flash of light, never a blast.
+    </div>
+  </details>
+</div>
+
+<div class="hud bottom">
+  <div class="box">
+    <div class="sources">
+      <button id="bDemo" type="button">▶ Demo beat</button>
+      <label class="filebtn" for="fileIn">Load audio file<input id="fileIn" type="file" accept="audio/*,video/*"></label>
+      <button id="bMic" type="button">Microphone</button>
+      <button id="bStop" type="button">Stop</button>
+    </div>
+    <div class="status" id="status">Silent. It still breathes and drifts; give it music.</div>
+  </div>
+  <div class="box meters" aria-label="Audio bands">
+    <span class="k">Bass</span><span class="bar"><i id="mB"></i></span><span class="m">swell · limbs</span>
+    <span class="k">Mids</span><span class="bar"><i id="mM"></i></span><span class="m">wind · twist</span>
+    <span class="k">Highs</span><span class="bar hi"><i id="mH"></i></span><span class="m">fire heat</span>
+  </div>
+  <div class="keys">drag to orbit · scroll to zoom<br>H hides the interface</div>
+</div>
+
+<script src="lib/three.min.js"></script>
+<script>
+(() => {
+const $ = id => document.getElementById(id);
+const status = t => $('status').textContent = t;
+
+/* =====================================================================
+   GLSL LIBRARY
+   ===================================================================== */
+const NOISE = `
+vec3 mod289(vec3 x){return x-floor(x*(1.0/289.0))*289.0;}
+vec4 mod289(vec4 x){return x-floor(x*(1.0/289.0))*289.0;}
+vec4 permute(vec4 x){return mod289(((x*34.0)+1.0)*x);}
+vec4 taylorInvSqrt(vec4 r){return 1.79284291400159-0.85373472095314*r;}
+float snoise(vec3 v){
+  const vec2 C=vec2(1.0/6.0,1.0/3.0); const vec4 D=vec4(0.0,0.5,1.0,2.0);
+  vec3 i=floor(v+dot(v,C.yyy)); vec3 x0=v-i+dot(i,C.xxx);
+  vec3 g=step(x0.yzx,x0.xyz); vec3 l=1.0-g;
+  vec3 i1=min(g.xyz,l.zxy); vec3 i2=max(g.xyz,l.zxy);
+  vec3 x1=x0-i1+C.xxx; vec3 x2=x0-i2+C.yyy; vec3 x3=x0-D.yyy;
+  i=mod289(i);
+  vec4 p=permute(permute(permute(i.z+vec4(0.0,i1.z,i2.z,1.0))+i.y+vec4(0.0,i1.y,i2.y,1.0))+i.x+vec4(0.0,i1.x,i2.x,1.0));
+  float n_=0.142857142857; vec3 ns=n_*D.wyz-D.xzx;
+  vec4 j=p-49.0*floor(p*ns.z*ns.z);
+  vec4 x_=floor(j*ns.z); vec4 y_=floor(j-7.0*x_);
+  vec4 x=x_*ns.x+ns.yyyy; vec4 y=y_*ns.x+ns.yyyy; vec4 h=1.0-abs(x)-abs(y);
+  vec4 b0=vec4(x.xy,y.xy); vec4 b1=vec4(x.zw,y.zw);
+  vec4 s0=floor(b0)*2.0+1.0; vec4 s1=floor(b1)*2.0+1.0; vec4 sh=-step(h,vec4(0.0));
+  vec4 a0=b0.xzyw+s0.xzyw*sh.xxyy; vec4 a1=b1.xzyw+s1.xzyw*sh.zzww;
+  vec3 p0=vec3(a0.xy,h.x); vec3 p1=vec3(a0.zw,h.y); vec3 p2=vec3(a1.xy,h.z); vec3 p3=vec3(a1.zw,h.w);
+  vec4 norm=taylorInvSqrt(vec4(dot(p0,p0),dot(p1,p1),dot(p2,p2),dot(p3,p3)));
+  p0*=norm.x;p1*=norm.y;p2*=norm.z;p3*=norm.w;
+  vec4 m=max(0.6-vec4(dot(x0,x0),dot(x1,x1),dot(x2,x2),dot(x3,x3)),0.0); m=m*m;
+  return 42.0*dot(m*m,vec4(dot(p0,x0),dot(p1,x1),dot(p2,x2),dot(p3,x3)));
+}
+vec3 gradN(vec3 p){
+  const float e=0.06; float n=snoise(p);
+  return vec3(snoise(p+vec3(e,0.,0.))-n, snoise(p+vec3(0.,e,0.))-n, snoise(p+vec3(0.,0.,e))-n)/e;
+}
+// divergence-free wind: cross product of two noise gradients (fluid, never clumps into blobs)
+vec3 curl(vec3 p){ vec3 c = cross(gradN(p), gradN(p+vec3(31.4,-17.2,8.7))); return c/(3.0 + length(c)); }
+`;
+
+// Radial opacity map: the space around the sun is cut into 64 shells (radius) x 64x64 directions.
+// Directions are stored with an octahedral map; shells are tiles of an 8x8 atlas (512x512).
+const SHADOWLIB = `
+#define SL 64.0
+#define TPR 8.0
+#define TR 64.0
+vec2 octEncode(vec3 n){
+  n /= (abs(n.x)+abs(n.y)+abs(n.z)+1e-6);
+  vec2 e = n.z >= 0.0 ? n.xy : (1.0-abs(n.yx))*vec2(n.x>=0.0?1.0:-1.0, n.y>=0.0?1.0:-1.0);
+  return e*0.5+0.5;
+}
+vec2 tileUVr(float s, vec2 o, float tr){
+  vec2 tile = vec2(mod(s, TPR), floor(s/TPR));
+  return (tile + (clamp(o,0.0,1.0)*(tr-1.0)+0.5)/tr)/TPR;
+}
+vec2 tileUV(float s, vec2 o){ return tileUVr(s, o, TR); }
+// key light: slices perpendicular to the light, light enters at slice 0
+uniform vec3 uKeyDir, uKeyB1, uKeyB2; uniform float uKeyR;
+vec3 keySpace(vec3 p){ return vec3(dot(p,uKeyB1), dot(p,uKeyB2), dot(p,uKeyDir))/(2.0*uKeyR) + 0.5; }
+`;
+const SHADE = SHADOWLIB + `
+uniform sampler2D tTau, tKey;
+uniform float uRmax, uExt, uExtK, uKeyI, uSun, uHigh, uTime;
+uniform vec3 uKeyCol; uniform float uDebug;
+float tauKey(vec3 p){
+  vec3 k = keySpace(p);
+  float s = clamp(k.z*SL - 0.5, 0.0, SL-1.001);
+  float s0 = floor(s);
+  return mix(texture2D(tKey, tileUVr(s0,k.xy,128.0)).r, texture2D(tKey, tileUVr(s0+1.0,k.xy,128.0)).r, s-s0);
+}
+float tauAt(vec3 p){
+  float r = length(p); vec2 o = octEncode(p/(r+1e-6));
+  float s = clamp(r/uRmax*SL - 0.5, 0.0, SL-1.001);
+  float s0 = floor(s);
+  return mix(texture2D(tTau, tileUV(s0,o)).r, texture2D(tTau, tileUV(s0+1.0,o)).r, s-s0);
+}
+float hg(float c, float g){ float g2=g*g; return (1.0-g2)/(12.566*pow(1.0+g2-2.0*g*c, 1.5)); }
+vec3 sunColor(){ return mix(vec3(1.0,0.16,0.05), vec3(1.0,0.36,0.1), clamp(uHigh*0.7,0.0,1.0)); }
+// light reaching a grain at p from the sun at the origin, scattered toward the camera
+vec3 shadeGrain(vec3 p, float seed, out float tauOut){
+  float r = length(p);
+  vec3 L = p/(r+1e-4);
+  vec3 E = normalize(cameraPosition - p);
+  float ct = dot(L, E);
+  float tau = tauAt(p)*uExt; tauOut = tau;
+  vec3 direct = exp(-tau*vec3(0.55, 1.0, 1.5)); // single scattering, shadowed; blue dies first so deep light reddens
+  vec3 soft = exp(-tau*0.22*vec3(0.5, 1.0, 1.6)); // cheap multiple-scattering term (light diffusing through sand)
+  float phase = hg(ct, 0.62)*0.8 + hg(ct, -0.3)*0.35;
+  float fall = 1.0/(0.55 + r*r);
+  vec3 sc = sunColor();
+  float gr = fract(seed*91.3);                         // most grains dark, a few glassy ones catch the light
+  vec3 albedo = vec3(0.5,0.49,0.5)*(0.3 + 0.9*gr*gr + 1.2*step(0.97, gr));
+  vec3 col = albedo*sc*uSun*fall*(direct*phase*4.5 + soft*0.2);
+  // key light from outside, upper left: its self-shadowing is what sculpts the folds
+  float tk = tauKey(p)*uExtK;
+  vec3 kT = exp(-tk*vec3(0.8, 1.0, 1.25));
+  float kph = hg(dot(uKeyDir, E), 0.35);
+  col += albedo*uKeyCol*uKeyI*(kT*kph*6.0 + exp(-tk*0.25)*0.06);
+  if(uDebug > 0.5) col = uDebug < 1.5 ? vec3(exp(-tk)) : vec3(exp(-tau));
+  col += albedo*vec3(0.018,0.019,0.025)*(0.5+0.5*L.y);            // faint cold sky from above
+  // glints: a few grains catch the light like mica for a split second
+  float gl = pow(max(0.0, sin(uTime*(1.5+fract(seed*7.7)*5.0) + seed*631.0)), 80.0)*step(0.75, fract(seed*17.3));
+  col += sc*gl*direct.g*fall*uSun*(0.6 + uHigh*3.0);
+  // embers: grains born in the core are plasma, hotter toward the centre
+  float core = step(seed, 0.0);
+  vec3 hot = mix(vec3(1.0,0.75,0.45), vec3(1.0,0.22,0.06), smoothstep(0.05, 0.6, r));
+  col += core*hot*uSun*(0.5 + uHigh*2.0)*fall*0.25*exp(-tau*0.4);
+  return col;
+}
+`;
+const QUAD_VERT = `varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }`;
+
+/* =====================================================================
+   SIMULATION (ping-pong float textures: position+life, velocity+seed)
+   ===================================================================== */
+// BEINGS: signed distance fields of figures the sand flows onto. They are never drawn;
+// the sand only finds them, so a form appears, dances and dissolves back into the cloud.
+const BEINGS = `
+uniform float uShapeA, uShapeB, uMorph, uShapeScale;
+uniform vec4 uPose;    // x: left arm, y: right arm, z: flap / open, w: turn
+uniform vec4 uPose2;   // x: lean, y: skirt swing, z: coil phase
+float smin(float a, float b, float k){ float h = clamp(0.5 + 0.5*(b - a)/k, 0.0, 1.0); return mix(b, a, h) - k*h*(1.0 - h); }
+float sdCap(vec3 p, vec3 a, vec3 b, float r){ vec3 pa = p - a, ba = b - a; float h = clamp(dot(pa, ba)/dot(ba, ba), 0.0, 1.0); return length(pa - ba*h) - r; }
+float sdEll(vec3 p, vec3 r){ float k0 = length(p/r); float k1 = length(p/(r*r)); return k0*(k0 - 1.0)/max(k1, 1e-4); }
+mat2 rot2(float a){ float c = cos(a), s = sin(a); return mat2(c, -s, s, c); }
+float shStar(vec3 p){ return length(p) - 1.0; }
+float shDancer(vec3 p){                        // a figure with two free arms and a flaring skirt
+  p.xz = rot2(uPose.w)*p.xz; p.xy = rot2(uPose2.x*0.25)*p.xy;
+  float d = sdEll(p - vec3(0.0, 0.32, 0.0), vec3(0.28, 0.42, 0.2));
+  d = smin(d, length(p - vec3(0.0, 0.95, 0.03)) - 0.19, 0.12);
+  float sk = 0.38 + 0.22*uPose2.y;
+  d = smin(d, sdEll(p - vec3(0.0, -0.22, 0.0), vec3(sk, 0.3, sk*0.75)), 0.16);
+  float st = uPose2.y;                         // legs step and kick with the swing
+  vec3 kL = vec3(-0.16 - 0.1*st, -0.78, 0.12*st), fL = vec3(-0.2 - 0.35*max(st, 0.0), -1.25 + 0.3*max(st, 0.0), 0.05);
+  vec3 kR = vec3( 0.16 - 0.05*st, -0.8, -0.05),  fR = vec3( 0.22 + 0.35*max(-st, 0.0), -1.27 + 0.3*max(-st, 0.0), -0.05);
+  d = smin(d, min(sdCap(p, vec3(-0.12, -0.35, 0.0), kL, 0.11), sdCap(p, kL, fL, 0.085)), 0.1);
+  d = smin(d, min(sdCap(p, vec3( 0.12, -0.35, 0.0), kR, 0.11), sdCap(p, kR, fR, 0.085)), 0.1);
+  vec3 sL = vec3(-0.25, 0.6, 0.0), sR = vec3(0.25, 0.6, 0.0);
+  vec3 eL = sL + 0.45*vec3(-sin(uPose.x*0.8 + 0.4), cos(uPose.x*0.8 + 0.4), 0.15);
+  vec3 eR = sR + 0.45*vec3( sin(uPose.y*0.8 + 0.4), cos(uPose.y*0.8 + 0.4), 0.15);
+  vec3 hL = eL + 0.45*vec3(-sin(uPose.x), cos(uPose.x), 0.25);
+  vec3 hR = eR + 0.45*vec3( sin(uPose.y), cos(uPose.y), 0.25);
+  d = smin(d, min(sdCap(p, sL, eL, 0.11), sdCap(p, eL, hL, 0.09)), 0.1);
+  d = smin(d, min(sdCap(p, sR, eR, 0.11), sdCap(p, eR, hR, 0.09)), 0.1);
+  return d;
+}
+float shWings(vec3 p){                         // a winged being, wings beating with the music
+  float d = sdEll(p, vec3(0.22, 0.55, 0.22));
+  d = smin(d, length(p - vec3(0.0, 0.72, 0.05)) - 0.15, 0.1);
+  vec3 q = p; q.x = abs(q.x); q -= vec3(0.12, 0.3, 0.0);
+  q.xy = rot2(-uPose.z*0.75)*q.xy;
+  d = smin(d, sdEll(q - vec3(0.8, 0.05, -0.05), vec3(0.85, 0.1, 0.45)), 0.14);
+  d = smin(d, sdEll(p - vec3(0.0, -0.8, -0.1), vec3(0.32, 0.38, 0.07)), 0.12);
+  return d;
+}
+float shEmbrace(vec3 p){                       // two figures holding each other, faces meeting in a kiss
+  float l = uPose2.x*0.06;
+  // A: torso, hips, legs, head tilted in
+  float a = sdEll(p - vec3(-0.3 - l, 0.15, 0.0), vec3(0.2, 0.42, 0.16));
+  a = smin(a, sdCap(p, vec3(-0.3, -0.2, 0.0), vec3(-0.36, -1.2, 0.05), 0.11), 0.08);
+  a = smin(a, sdCap(p, vec3(-0.3, -0.2, 0.0), vec3(-0.18, -1.2, -0.05), 0.11), 0.08);
+  a = smin(a, length(p - vec3(-0.16 - l, 0.78, 0.0)) - 0.15, 0.08);
+  // B: mirrored, a little shorter, head tilted the other way
+  float b = sdEll(p - vec3(0.3 + l, 0.1, 0.0), vec3(0.19, 0.4, 0.15));
+  b = smin(b, sdCap(p, vec3(0.3, -0.25, 0.0), vec3(0.36, -1.2, 0.05), 0.105), 0.08);
+  b = smin(b, sdCap(p, vec3(0.3, -0.25, 0.0), vec3(0.2, -1.2, -0.05), 0.105), 0.08);
+  b = smin(b, length(p - vec3(0.15 + l, 0.72, 0.0)) - 0.14, 0.08);
+  float d = smin(a, b, 0.04);
+  // arms wrapped around each other
+  d = smin(d, sdCap(p, vec3(-0.38, 0.45, 0.0), vec3(0.42, 0.35, -0.12), 0.06), 0.06);
+  d = smin(d, sdCap(p, vec3(0.38, 0.4, 0.0), vec3(-0.12, 0.6, 0.14), 0.055), 0.06);
+  return d;
+}
+float shHand(vec3 p){                          // a hand opening and closing
+  float o = 0.5 + 0.5*uPose.z;
+  float d = sdEll(p - vec3(0.0, -0.35, 0.0), vec3(0.36, 0.42, 0.16));
+  d = smin(d, sdCap(p, vec3(0.0, -0.7, 0.0), vec3(0.0, -1.2, 0.0), 0.2), 0.15);
+  for(int i = 0; i < 4; i++){
+    float fi = float(i) - 1.5;
+    float ang = fi*0.22*(0.3 + o);
+    vec3 b = vec3(fi*0.19, 0.0, 0.0);
+    vec3 tip = b + (0.55 + 0.3*o - abs(fi)*0.1)*vec3(sin(ang), cos(ang), 0.5*(1.0 - o));
+    d = smin(d, sdCap(p, b, tip, 0.1), 0.07);
+  }
+  vec3 tb = vec3(-0.3, -0.38, 0.05);
+  d = smin(d, sdCap(p, tb, tb + 0.55*vec3(-0.6*o - 0.25, 0.55, 0.3*(1.0 - o)), 0.1), 0.08);
+  return d;
+}
+float shSerpent(vec3 p){                       // a coiling body rising
+  float d = 1e3;
+  for(int i = 0; i < 8; i++){
+    float fi = float(i); float a = fi*0.85 + uPose2.z;
+    vec3 c = vec3(0.6*cos(a), -1.0 + fi*0.27, 0.6*sin(a));
+    d = smin(d, length(p - c) - (0.3 - fi*0.022), 0.2);
+  }
+  return d;
+}
+float shCrouch(vec3 p){                        // a figure folded over its knees
+  float d = sdEll(p - vec3(0.0, -0.15, -0.1), vec3(0.62, 0.5, 0.48));
+  d = smin(d, length(p - vec3(0.0, 0.1, 0.5)) - 0.2, 0.15);
+  d = smin(d, sdCap(p, vec3(-0.42, 0.12, 0.15), vec3(-0.2, -0.45, 0.6), 0.09), 0.1);
+  d = smin(d, sdCap(p, vec3(0.42, 0.12, 0.15), vec3(0.2, -0.45, 0.6), 0.09), 0.1);
+  return d;
+}
+float shapeById(float id, vec3 p){
+  if(id < 0.5) return shStar(p);
+  if(id < 1.5) return shDancer(p);
+  if(id < 2.5) return shWings(p);
+  if(id < 3.5) return shEmbrace(p);
+  if(id < 4.5) return shHand(p);
+  if(id < 5.5) return shSerpent(p);
+  return shCrouch(p);
+}
+float sdBeing(vec3 p){
+  p /= uShapeScale;
+  float a = shapeById(uShapeA, p);
+  if(uMorph > 0.001) a = mix(a, shapeById(uShapeB, p), uMorph);
+  return a*uShapeScale;
+}
+vec3 gradBeing(vec3 p){
+  const vec2 k = vec2(1.0, -1.0); const float e = 0.015;
+  return normalize(k.xyy*sdBeing(p + k.xyy*e) + k.yyx*sdBeing(p + k.yyx*e) + k.yxy*sdBeing(p + k.yxy*e) + k.xxx*sdBeing(p + k.xxx*e) + 1e-6);
+}
+`;
+
+const SIM_VEL = NOISE + BEINGS + `
+uniform sampler2D tPos, tVel, tRest;
+uniform float uTime, uDt, uBass, uMid, uHigh, uKick, uFlowT;
+uniform vec3 uRollAxis;
+uniform float uRadius, uWind, uFreq, uSwirl, uSpring, uDrag, uEye, uLump, uFold, uRise, uJets, uFree;
+uniform vec3 uAxis, uCamDir, uJet0, uJet1, uJet2;
+uniform float uTwist, uStretch, uRipAge, uRipAmp, uPour;
+uniform vec3 uStrAxis, uRipDir, uLobe0, uLobe1, uLobe2, uLobe3;
+uniform vec4 uLobeAmp;
+varying vec2 vUv;
+vec3 rotAxis(vec3 v, vec3 k, float a){ return v*cos(a) + cross(k, v)*sin(a) + k*dot(k, v)*(1.0 - cos(a)); }
+void main(){
+  vec4 P = texture2D(tPos, vUv), V = texture2D(tVel, vUv), R = texture2D(tRest, vUv);
+  vec3 p = P.xyz, v = V.xyz; float seed = V.w, life = P.w;
+  vec3 rd = R.xyz; float layer = R.w;
+  float r = length(p); vec3 dir = p/(r + 1e-5);
+  float t = uTime;
+  float R0 = uRadius*(1.0 + uBass*0.015);       // the body breathes a little with the bass; it never bursts
+
+  // HOME. Every grain owns a direction; from there it slides onto the surface of the hidden being.
+  // Neighbouring grains land next to each other, so the sand forms skins and veils around the figure.
+  // start anywhere in a volume around the figure, so thin limbs collect their share of grains
+  // ROLL: the skins slide over each other without stopping. Each layer turns at its own rate and the
+  // angle is bent by noise, so ridges form, travel across the body and fold under: smoke rolling, not a blast.
+  float roll = uFlowT*(0.10 + 0.12*(layer - 0.8)) + 0.9*snoise(rd*1.1 + vec3(uFlowT*0.07, 0.0, layer));
+  rd = rotAxis(rd, uRollAxis, roll);
+  vec3 hp = rd*R0*(0.15 + 1.45*pow(fract(seed*7.77 + layer*3.1), 0.8));
+  for(int i = 0; i < 8; i++){ hp -= gradBeing(hp)*sdBeing(hp); }
+  vec3 n = gradBeing(hp);
+  float ft = uFlowT;                             // flow time: runs faster when the music pushes, never jumps
+  vec3 q = hp*1.2 + vec3(0.0, ft*0.09, ft*0.05) + layer*0.7;
+  float lump = snoise(hp*0.9 + vec3(0.0, ft*0.13, ft*0.05)) + 0.5*snoise(hp*2.2 - ft*0.1);
+  vec3 fold = vec3(snoise(q), snoise(q + 17.1), snoise(q + 43.7)) + 0.5*vec3(snoise(q*2.3 + 5.0), snoise(q*2.3 + 23.0), snoise(q*2.3 + 61.0));
+  // limbs thrown on kicks and a ripple from the impact, both pushing the skin along its normal
+  vec3 hd = normalize(hp + 1e-5);
+  float lobes = uLobeAmp.x*pow(max(0.0, dot(hd, uLobe0)), 3.0) + uLobeAmp.y*pow(max(0.0, dot(hd, uLobe1)), 3.0)
+              + uLobeAmp.z*pow(max(0.0, dot(hd, uLobe2)), 3.0) + uLobeAmp.w*pow(max(0.0, dot(hd, uLobe3)), 3.0);
+  float ang = acos(clamp(dot(hd, uRipDir), -1.0, 1.0));
+  float front = uRipAge*1.5;
+  float rip = sin((ang - front)*9.0)*exp(-pow(ang - front, 2.0)*5.0)*exp(-uRipAge*1.2)*uRipAmp;
+  float skin = (layer - 0.97)*mix(0.16, 0.42, uFree);               // nested skins: the being has a thick body of sand
+  vec3 home = hp + n*R0*(skin + uLump*lump*mix(0.15, 0.6, uFree) + 0.55*lobes*uFree + 0.07*rip) + fold*uFold*R0*mix(0.45, 1.0, uFree);
+  // twist: the body wrings itself, outer skins lag behind
+  home = rotAxis(home, uAxis, uTwist*dot(normalize(home + 1e-5), uAxis)*(0.6 + layer*0.6)*mix(0.35, 1.0, uFree));
+  // posture: stretch along a slowly turning axis, squash across it
+  float sa = dot(home, uStrAxis);
+  home += (uStrAxis*sa*uStretch - (home - uStrAxis*sa)*uStretch*0.45)*mix(0.3, 1.0, uFree);
+  // curtains: the underside pours down in drapes
+  float drape = smoothstep(0.25, -0.9, hd.y)*(0.6 + 0.6*(0.5 + 0.5*fold.x));
+  home.y -= uPour*R0*drape*(0.6 + 0.6*layer);
+  home.xz *= 1.0 - uPour*drape*0.25;
+
+  // the last part of a grain's life it breaks free and drifts away as dust
+  float bound = smoothstep(0.03, 0.1, life);
+  vec3 f = (home - p)*uSpring*bound;
+
+  // wind: large curl bends the veils, small curl makes them read as sand; mostly along the skin
+  float w = uWind*(1.0 + uMid*0.25)*mix(0.55, 1.0, uFree);
+  vec3 cw = curl(p*uFreq + vec3(0.0, t*0.11, t*0.07));
+  cw -= n*dot(cw, n)*0.75*bound;
+  f += cw*w*(1.0 + 1.6*(1.0 - bound));
+  f += curl(p*uFreq*3.4 + vec3(9.0, -t*0.23, 4.0))*w*(0.3 + 1.2*(1.0 - bound));
+  f += cross(uAxis, p)*uSwirl*uFree/(0.35 + r*r*0.5);
+
+  float j = pow(max(0.0, dot(dir, uJet0)), 30.0) + pow(max(0.0, dot(dir, uJet1)), 30.0) + pow(max(0.0, dot(dir, uJet2)), 30.0);
+  f += dir*j*uJets*uFree*(0.6 + uHigh*2.5)*step(0.6, fract(seed*5.31))*3.0;
+
+  float al = dot(p, uCamDir); vec3 rad = p - uCamDir*al; float rl = length(rad);
+  float eyeMask = uEye*uFree*smoothstep(-0.4, 0.5, al)*exp(-rl*rl*5.0);
+  f += rad/(rl + 1e-4)*eyeMask*5.0 + cross(uCamDir, p)*uEye*uFree*1.3/(0.25 + rl);
+
+  f.y += uRise*(0.3 + (1.0 - bound));
+
+  v += f*uDt;
+  // kick: an impulse along the skin normal, strength varying smoothly so whole veils are thrown
+  float kn = 0.5 + 0.5*snoise(hd*1.7 + vec3(t*0.3));
+  v += normalize(n + dir)*uKick*0.0*(0.2 + 1.5*kn*kn + 0.3*fract(seed*13.7)*(1.0 - bound));
+  v *= exp(-uDrag*uDt);
+  gl_FragColor = vec4(v, seed);
+}`;
+
+const SIM_POS = `
+uniform sampler2D tPos, tVel, tRest; uniform float uDt, uTime, uRadius;
+varying vec2 vUv;
+vec3 hash3(vec2 p){ return fract(sin(vec3(dot(p,vec2(127.1,311.7)),dot(p,vec2(269.5,183.3)),dot(p,vec2(419.2,371.9))))*43758.5453); }
+void main(){
+  vec4 P = texture2D(tPos, vUv), V = texture2D(tVel, vUv);
+  vec3 p = P.xyz + V.xyz*uDt;
+  float life = P.w - uDt*(0.035 + 0.06*fract(V.w*31.7));
+  if(life < 0.0 || length(p) > 7.0){
+    vec4 R = texture2D(tRest, vUv);
+    p = R.xyz*uRadius*R.w*0.8;               // reborn on its sheet, slightly inside, then settles
+    life = 1.0;
+  }
+  gl_FragColor = vec4(p, life);
+}`;
+
+/* =====================================================================
+   SHADOW VOLUME: splat grains into radial shells, then integrate outward
+   ===================================================================== */
+const SPLAT_VERT = SHADOWLIB + `
+uniform sampler2D tPos; uniform float uRmax, uNorm, uMode;
+attribute vec2 ref; varying float vW;
+void main(){
+  vec3 p = texture2D(tPos, ref).xyz; float r = length(p);
+  if(uMode > 0.5){
+    vec3 k = keySpace(p);
+    if(any(lessThan(k, vec3(0.0))) || any(greaterThan(k, vec3(1.0)))){ gl_Position = vec4(2.0,2.0,2.0,1.0); return; }
+    vec2 uvk = tileUVr(floor(k.z*SL), k.xy, 128.0);
+    gl_Position = vec4(uvk*2.0-1.0, 0.0, 1.0); gl_PointSize = 1.0; vW = uNorm; return;
+  }
+  float s = clamp(floor(r/uRmax*SL), 0.0, SL-1.0);
+  vec2 uv = tileUV(s, octEncode(p/(r+1e-6)));
+  gl_Position = vec4(uv*2.0-1.0, 0.0, 1.0); gl_PointSize = 1.0;
+  vec3 n = p/(r+1e-6); float l1 = abs(n.x)+abs(n.y)+abs(n.z);
+  // a grain blocks a larger share of the sky the closer it is to the sun;
+  // divide by the texel's solid angle (octahedral cells are 5x larger on the diagonals)
+  vW = uNorm/(r*r + 0.03)*2.6/(l1*l1*l1);
+}`;
+const SPLAT_FRAG = `varying float vW; void main(){ gl_FragColor = vec4(vW, 0.0, 0.0, 1.0); }`;
+const INTEG_FRAG = `
+#define TPR 8.0
+uniform sampler2D tDen; varying vec2 vUv;
+void main(){
+  vec2 cell = floor(vUv*TPR); float k = cell.y*TPR + cell.x;
+  vec2 inner = fract(vUv*TPR);
+  float tau = 0.0;
+  for(int j=0;j<64;j++){
+    float fj = float(j); if(fj > k) break;
+    vec2 tile = vec2(mod(fj, TPR), floor(fj/TPR));
+    float d = texture2D(tDen, (tile + inner)/TPR).r;
+    tau += fj == k ? d*0.5 : d;
+  }
+  gl_FragColor = vec4(tau, 0.0, 0.0, 1.0);
+}`;
+
+/* =====================================================================
+   RENDER: grains (points), streaks (lines), the sun
+   ===================================================================== */
+const SAND_VERT = NOISE + SHADE + `
+uniform sampler2D tPos, tVel, tRest; uniform float uEmberG, uFlowT;
+uniform float uSize, uScale, uFocus, uAperture, uSide, uOriginDepth, uBodySize, uBodyA;
+attribute vec2 ref;
+varying vec3 vCol; varying float vA;
+void main(){
+  vec4 P = texture2D(tPos, ref), V = texture2D(tVel, ref);
+  vec3 p = P.xyz; float seed = V.w;
+  vec4 mv = modelViewMatrix*vec4(p, 1.0);
+  float depth = -mv.z;
+  // drawn in two halves (behind the sun, then in front) so the sand really hides the sun
+  if((depth - uOriginDepth)*uSide < 0.0){ gl_Position = vec4(2.0,2.0,2.0,1.0); gl_PointSize = 0.0; return; }
+  gl_Position = projectionMatrix*mv;
+#ifdef BODY
+  // body pass: a subset of grains drawn as large faint puffs, building the smoky surface the sand sits on
+  if(fract(seed*4.13) > 0.45){ gl_Position = vec4(2.0,2.0,2.0,1.0); gl_PointSize = 0.0; return; }
+#endif
+  float tau; vCol = shadeGrain(p, seed, tau);
+  // FIRE FROM INSIDE: the inner skins of sand are themselves embers. Glowing patches drift through the
+  // body and follow whatever figure the sand is making; the outer skins cover them, so the light seems to
+  // come from deep inside the shape and leak out through its thin places.
+  float layer = texture2D(tRest, ref).w;
+  float inner = smoothstep(1.02, 0.84, layer);
+  float embN = snoise(p*1.35 + vec3(0.0, -uFlowT*0.22, uFlowT*0.08)) + 0.45*snoise(p*3.1 + vec3(uFlowT*0.15, 0.0, 0.0));
+  float hot = smoothstep(0.05, 0.9, embN)*inner;
+  float e = hot*hot*uEmberG*(0.6 + 0.8*fract(seed*23.7));
+  vCol += mix(vec3(0.55, 0.035, 0.012), vec3(1.0, 0.22, 0.05), smoothstep(0.4, 1.4, e))*e*2.2;
+  // depth of field: out-of-focus grains swell into soft discs and lose energy
+  float base = uSize*(0.5 + 1.2*pow(fract(seed*57.1), 2.0))*uScale/depth;
+#ifdef BODY
+  base *= uBodySize;
+#endif
+  float coc = abs(depth - uFocus)*uAperture*uScale/depth;
+  float sz = sqrt(base*base + coc*coc);
+  gl_PointSize = max(sz, 1.0);
+  float life = P.w;
+  float fade = smoothstep(0.0, 0.1, life)*smoothstep(1.0, 0.9, life);
+  vA = 0.92*fade*clamp(base*base,0.2,1.0)*min(1.0, (base*base)/(sz*sz) + 0.02);
+#ifdef BODY
+  vA *= uBodyA;
+#endif
+}`;
+const SAND_FRAG = `
+varying vec3 vCol; varying float vA;
+void main(){
+  float d = length(gl_PointCoord - 0.5);
+  float a = smoothstep(0.5, 0.18, d)*vA;
+  if(a < 0.003) discard;
+  gl_FragColor = vec4(vCol, a);
+}`;
+const STREAK_VERT = SHADE + `
+uniform sampler2D tPos, tVel; uniform float uStreak;
+attribute vec2 ref; attribute float aEnd;
+varying vec3 vCol; varying float vA;
+void main(){
+  vec4 P = texture2D(tPos, ref), V = texture2D(tVel, ref);
+  float speed = length(V.xyz);
+  // threads: half the grains draw a short line along their motion, so the sand reads as fibres combed by the wind
+  float on = step(0.35, fract(V.w*3.91))*(0.6 + 0.4*smoothstep(0.3, 1.5, speed));
+  if(on < 0.01 || speed < 1e-4){ gl_Position = vec4(2.0,2.0,2.0,1.0); return; }
+  vec3 p = P.xyz - (V.xyz/speed)*(0.07 + 0.08*fract(V.w*7.3) + speed*uStreak)*(1.0 - aEnd);
+  gl_Position = projectionMatrix*modelViewMatrix*vec4(p, 1.0);
+  float tau; vCol = shadeGrain(P.xyz, V.w, tau);
+  float life = P.w;
+  vA = on*mix(0.0, 0.07, aEnd)*smoothstep(0.0, 0.1, life)*smoothstep(1.0, 0.9, life);
+}`;
+const STREAK_FRAG = `varying vec3 vCol; varying float vA; void main(){ gl_FragColor = vec4(vCol, vA); }`;
+
+const SUN_VERT = `
+varying vec2 vUv;
+void main(){ vUv = uv; vec4 mv = modelViewMatrix*vec4(0.0,0.0,0.0,1.0); mv.xy += position.xy; gl_Position = projectionMatrix*mv; }`;
+const SUN_FRAG = NOISE + `
+uniform float uTime, uSun, uHigh, uEye, uFlash;
+varying vec2 vUv;
+void main(){
+  vec2 q = (vUv*2.0 - 1.0)*1.6;
+  // the photosphere boils: its edge is warped by noise so it is never a clean disc
+  float a = atan(q.y, q.x);
+  float edge = 0.10*(1.0 + 0.35*snoise(vec3(cos(a)*1.8, sin(a)*1.8, uTime*0.4)) + 0.15*uFlash);
+  float r = length(q);
+  float gran = snoise(vec3(q*22.0, uTime*0.6))*0.5 + 0.5;          // granulation
+  float disc = smoothstep(edge, edge*0.55, r);
+  float core = exp(-r*r*900.0)*14.0;
+  float limb = disc*(0.55 + 0.45*gran)*(1.0 - 0.6*smoothstep(0.0, edge, r));
+  float n = snoise(vec3(q*4.0, uTime*0.2));
+  float corona = exp(-r*r*30.0)*(0.25 + 0.25*n)*(0.6 + 0.6*snoise(vec3(cos(a)*3.0, sin(a)*3.0, uTime*0.3)));
+  float ring = exp(-pow((r - 0.16 - uEye*0.05)*16.0, 2.0))*uEye*1.2;
+  vec3 white = vec3(1.0, 0.82, 0.6), warm = vec3(1.0, 0.36, 0.12), deep = vec3(0.6, 0.07, 0.03);
+  vec3 col = white*core + mix(warm, white, 0.3 + 0.4*uHigh)*limb*5.0 + deep*corona + warm*ring;
+  gl_FragColor = vec4(col*uSun*(1.0 + uFlash*1.2)*0.6, 1.0);
+}`;
+
+// FIRE: the heart is not a disc but a few soft, boiling patches of fire drifting inside the body.
+const FIRE_VERT = `
+uniform vec3 uCenter; uniform float uSize;
+varying vec2 vUv;
+void main(){ vUv = uv; vec4 mv = modelViewMatrix*vec4(uCenter, 1.0); mv.xy += position.xy*uSize; gl_Position = projectionMatrix*mv; }`;
+const FIRE_FRAG = NOISE + `
+uniform float uTime, uI, uSeed;
+varying vec2 vUv;
+void main(){
+  vec2 q = vUv*2.0 - 1.0; float r = length(q);
+  float n = snoise(vec3(q*1.3 + uSeed, uTime*0.22 + uSeed)) + 0.5*snoise(vec3(q*2.9 - uSeed, uTime*0.37)) + 0.25*snoise(vec3(q*6.0, uTime*0.5 + uSeed));
+  float m = smoothstep(1.0, 0.05, r*1.05 + n*0.42);
+  m *= m;
+  float e = m*uI;
+  vec3 col = mix(vec3(0.45,0.02,0.01), vec3(1.0,0.10,0.025), smoothstep(0.0, 0.6, e));
+  col = mix(col, vec3(1.0,0.36,0.08), smoothstep(1.2, 2.6, e));
+  col = mix(col, vec3(1.0,0.7,0.4), smoothstep(3.0, 4.5, e));
+  gl_FragColor = vec4(col*e, 1.0);
+}`;
+
+
+/* =====================================================================
+   SMOKE VOLUME: the grains are splatted into a 3D density grid every frame
+   (the key-light atlas); here each pixel marches a ray through that grid.
+   Grey smoke is lit by the key light and by the fire, both shadowed by the
+   smoke itself; the fire is an emission living in the dense core, so it is
+   seen through the smoke in front of it: it glows from inside.
+   ===================================================================== */
+const KBLUR_FRAG = `uniform sampler2D tex; uniform vec2 uDir; varying vec2 vUv;
+void main(){
+  vec4 c = texture2D(tex, vUv)*0.375 + (texture2D(tex, vUv + uDir) + texture2D(tex, vUv - uDir))*0.25 + (texture2D(tex, vUv + 2.0*uDir) + texture2D(tex, vUv - 2.0*uDir))*0.0625;
+  gl_FragColor = c;
+}`;
+const VOL_FRAG = NOISE + SHADE + `
+uniform sampler2D tKeyDen; uniform mat4 uInvVP; uniform vec3 uCamPos; uniform float uSmoke, uEmber, uFlowT, uEyeGlow;
+varying vec2 vUv;
+float denKey(vec3 p){
+  vec3 k = keySpace(p);
+  if(any(lessThan(k, vec3(0.0))) || any(greaterThan(k, vec3(1.0)))) return 0.0;
+  float s = clamp(k.z*SL - 0.5, 0.0, SL-1.001); float s0 = floor(s);
+  return mix(texture2D(tKeyDen, tileUVr(s0,k.xy,128.0)).r, texture2D(tKeyDen, tileUVr(s0+1.0,k.xy,128.0)).r, s-s0);
+}
+void main(){
+  vec4 w = uInvVP*vec4(vUv*2.0 - 1.0, 1.0, 1.0);
+  vec3 ro = uCamPos, rd = normalize(w.xyz/w.w - uCamPos);
+  float R = uKeyR*0.92, b = dot(ro, rd), h = b*b - (dot(ro, ro) - R*R);
+  if(h < 0.0){ gl_FragColor = vec4(0.0); return; }
+  h = sqrt(h);
+  float t0 = max(-b - h, 0.0), t1 = -b + h;
+  const int N = 64; float ds = (t1 - t0)/float(N);
+  float jit = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233)) + fract(uTime*7.1)*91.7)*43758.5453);
+  float slice = 2.0*uKeyR/SL;
+  vec3 sc = sunColor();
+  float kph = hg(dot(uKeyDir, -rd), 0.3);
+  float T = 1.0; vec3 col = vec3(0.0);
+  for(int i = 0; i < N; i++){
+    vec3 p = ro + rd*(t0 + (float(i) + jit)*ds);
+    float d = denKey(p);
+    if(d < 1e-3) continue;
+    // churning detail: a warped noise carved into the density, advected by the flow, so the smoke
+    // breaks into curling strands and pockets instead of a smooth blur
+    float wq = snoise(p*1.1 + vec3(uFlowT*0.09, -uFlowT*0.05, 0.0));
+    float det = snoise(p*2.9 + vec3(0.0, uFlowT*0.14, uFlowT*0.04) + wq*1.3);
+    d *= 0.25 + 1.3*smoothstep(-0.55, 0.75, det);
+    float a = 1.0 - exp(-d*uExtK/slice*uSmoke*ds);
+    float r = length(p);
+    float tk = tauKey(p)*uExtK;
+    vec3 key = uKeyCol*uKeyI*(exp(-tk*vec3(0.8, 1.0, 1.25))*kph*1.6 + exp(-tk*0.3)*0.05);
+    float tau = tauAt(p)*uExt;
+    float ct = dot(p/(r + 1e-4), -rd);
+    vec3 inner = sc*uSun*exp(-tau*vec3(0.55, 1.0, 1.5))/(0.55 + r*r)*((hg(ct, 0.62)*0.8 + hg(ct, -0.3)*0.35)*3.0 + 0.12);
+    // fire: drifting hot patches in the dense core
+    float n = snoise(p*0.5 + vec3(0.0, -uFlowT*0.16, uFlowT*0.06)) + 0.3*snoise(p*1.6 + vec3(uFlowT*0.15, 0.0, -uFlowT*0.05));
+    float hot = smoothstep(0.05, 1.1, n)*smoothstep(0.3, 1.8, tk)*smoothstep(1.8, 0.45, r)*1.25;   // the fire keeps to the heart of the body
+    // in the eye, the fire lines the inside of the tunnel
+    vec3 cd = normalize(uCamPos); float ax = length(p - cd*dot(p, cd));
+    hot += 1.9*uEyeGlow*smoothstep(-0.5, 0.7, n)*exp(-ax*ax*2.5)*smoothstep(1.6, 0.35, r);
+    float e = hot*hot*uEmber;
+    vec3 em = mix(vec3(0.5, 0.025, 0.01), vec3(1.0, 0.13, 0.03), smoothstep(0.4, 1.4, e))*e*2.0;
+    col += T*a*(vec3(0.17, 0.165, 0.175)*(key + inner) + em);
+    T *= 1.0 - a;
+    if(T < 0.01) break;
+  }
+  gl_FragColor = vec4(col, 1.0 - T);
+}`;
+const VCOMP_FRAG = `uniform sampler2D tex; varying vec2 vUv; void main(){ gl_FragColor = texture2D(tex, vUv); }`;
+
+/* =====================================================================
+   POST: trails, bloom pyramid, light shafts, lens, ACES
+   ===================================================================== */
+const TRAIL_FRAG = `uniform sampler2D tCur, tPrev; uniform float uPersist; varying vec2 vUv;
+void main(){ vec3 c = texture2D(tCur, vUv).rgb, p = texture2D(tPrev, vUv).rgb; gl_FragColor = vec4(max(c, p*uPersist), 1.0); }`;
+const BRIGHT_FRAG = `uniform sampler2D tex; uniform float uThresh; varying vec2 vUv;
+void main(){
+  // 4-tap box downsample, then soft threshold
+  vec2 o = vec2(0.25)/vec2(textureSize(tex, 0));
+  vec3 c = (texture2D(tex, vUv+o).rgb + texture2D(tex, vUv-o).rgb + texture2D(tex, vUv+vec2(o.x,-o.y)).rgb + texture2D(tex, vUv+vec2(-o.x,o.y)).rgb)*0.25;
+  float l = max(c.r, max(c.g, c.b));
+  float k = max(l - uThresh, 0.0); k = k*k/(k + 0.5);
+  gl_FragColor = vec4(c*k/max(l, 1e-4), 1.0);
+}`;
+const BLUR_FRAG = `uniform sampler2D tex; uniform vec2 uDir; varying vec2 vUv;
+void main(){
+  vec3 c = texture2D(tex, vUv).rgb*0.227027;
+  c += (texture2D(tex, vUv + uDir*1.3846).rgb + texture2D(tex, vUv - uDir*1.3846).rgb)*0.316216;
+  c += (texture2D(tex, vUv + uDir*3.2308).rgb + texture2D(tex, vUv - uDir*3.2308).rgb)*0.070270;
+  gl_FragColor = vec4(c, 1.0);
+}`;
+const RAYS_FRAG = `uniform sampler2D tex; uniform vec2 uSunUV; uniform float uLen; varying vec2 vUv;
+float rnd(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233)))*43758.5453); }
+void main(){
+  vec2 d = (vUv - uSunUV)*uLen/48.0;
+  vec2 uv = vUv - d*rnd(vUv*917.0);
+  vec3 c = vec3(0.0); float w = 1.0;
+  for(int i=0;i<48;i++){ uv -= d; c += texture2D(tex, uv).rgb*w; w *= 0.955; }
+  gl_FragColor = vec4(c/20.0, 1.0);
+}`;
+const FINAL_FRAG = `
+uniform sampler2D tScene, tB1, tB2, tB3, tB4, tB5, tRays; uniform float uTime, uBloom, uRays, uExposure; uniform vec2 uRes;
+varying vec2 vUv;
+vec3 aces(vec3 x){ return clamp((x*(2.51*x + 0.03))/(x*(2.43*x + 0.59) + 0.14), 0.0, 1.0); }
+float rnd(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233)))*43758.5453); }
+void main(){
+  vec2 d = vUv - 0.5;
+  float ca = 0.006*dot(d, d);
+  vec3 c;
+  c.r = texture2D(tScene, vUv - d*ca*2.0).r;
+  c.g = texture2D(tScene, vUv).g;
+  c.b = texture2D(tScene, vUv + d*ca*2.0).b;
+  vec3 b = texture2D(tB1, vUv).rgb*0.5 + texture2D(tB2, vUv).rgb*0.7 + texture2D(tB3, vUv).rgb*0.9 + texture2D(tB4, vUv).rgb*1.1 + texture2D(tB5, vUv).rgb*1.3;
+  c += b*uBloom*0.25;
+  c += texture2D(tRays, vUv).rgb*uRays;
+  c *= uExposure;
+  c = aces(c);
+  c *= mix(1.0, smoothstep(0.9, 0.25, length(d*vec2(uRes.x/uRes.y, 1.0))*0.8), 0.6);
+  c = pow(c, vec3(1.0/2.2));
+  // deep blacks: crush the shadows, keep the lit edges and the fire bright
+  c = c + vec3(0.05, 0.048, 0.05)*(1.0 - c);       // the reel's background is a deep grey, not a void
+  c = mix(c, c*c*(3.0 - 2.0*c), 0.35);             // gentle S-curve: black stays black, the sand stays a readable grey
+  c += (rnd(vUv*uRes + fract(uTime*7.3)*100.0) - 0.5)*0.02*(0.3 + c);
+  gl_FragColor = vec4(c, 1.0);
+}`;
+
+/* =====================================================================
+   SETUP
+   ===================================================================== */
+const canvas = $('stage');
+let renderer;
+try { renderer = new THREE.WebGLRenderer({canvas, antialias:false, powerPreference:'high-performance'}); }
+catch(e){ status('WebGL is not available in this browser.'); return; }
+if(!renderer.capabilities.isWebGL2){ status('This piece needs WebGL 2. Try a recent Chrome, Safari or Firefox.'); return; }
+const floatRT = renderer.extensions.has('EXT_color_buffer_float');
+const SIM_TYPE = floatRT ? THREE.FloatType : THREE.HalfFloatType;
+renderer.extensions.get('EXT_float_blend');
+renderer.autoClear = false;
+
+const quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const quadScene = new THREE.Scene();
+const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2)); quad.frustumCulled = false; quadScene.add(quad);
+const qmat = (frag, uniforms) => new THREE.ShaderMaterial({vertexShader:QUAD_VERT, fragmentShader:frag, uniforms, depthTest:false, depthWrite:false});
+function pass(mat, target){ quad.material = mat; renderer.setRenderTarget(target); renderer.render(quadScene, quadCam); }
+const rt = (w, h, type, filter = THREE.LinearFilter) => new THREE.WebGLRenderTarget(w, h, {type, format:THREE.RGBAFormat, minFilter:filter, magFilter:filter, depthBuffer:false, stencilBuffer:false});
+
+const A = { bass:0, mid:0, high:0, kick:0 };
+const RMAX = 3.6;
+
+// ---- simulation state ----
+const simU = {
+  tPos:{value:null}, tVel:{value:null}, uTime:{value:0}, uDt:{value:0.016},
+  uBass:{value:0}, uMid:{value:0}, uHigh:{value:0}, uKick:{value:0},
+  uRadius:{value:1}, uWind:{value:1}, uFreq:{value:1}, uSwirl:{value:0.3}, uSpring:{value:2.5}, uDrag:{value:1.4},
+  tRest:{value:null}, uEye:{value:0}, uLump:{value:0.25}, uFold:{value:0.2}, uRise:{value:0.1}, uJets:{value:0.5},
+  uAxis:{value:new THREE.Vector3(0,1,0)}, uCamDir:{value:new THREE.Vector3(0,0,1)},
+  uFlowT:{value:0}, uRollAxis:{value:new THREE.Vector3(0,1,0)}, uTwist:{value:0}, uStretch:{value:0}, uPour:{value:0}, uFree:{value:1},
+  uShapeA:{value:0}, uShapeB:{value:0}, uMorph:{value:0}, uShapeScale:{value:1}, uPose:{value:new THREE.Vector4(0.3,0.3,0,0)}, uPose2:{value:new THREE.Vector4()}, uRipAge:{value:9}, uRipAmp:{value:0}, uStrAxis:{value:new THREE.Vector3(0,1,0)}, uRipDir:{value:new THREE.Vector3(1,0,0)},
+  uLobe0:{value:new THREE.Vector3(1,0,0)}, uLobe1:{value:new THREE.Vector3(0,1,0)}, uLobe2:{value:new THREE.Vector3(0,0,1)}, uLobe3:{value:new THREE.Vector3(-1,0,0)}, uLobeAmp:{value:new THREE.Vector4()},
+  uJet0:{value:new THREE.Vector3(1,0,0)}, uJet1:{value:new THREE.Vector3(0,1,0)}, uJet2:{value:new THREE.Vector3(0,0,1)}
+};
+const velMat = qmat(SIM_VEL, simU), posMat = qmat(SIM_POS, simU);
+const copyMat = qmat(`uniform sampler2D tex; varying vec2 vUv; void main(){ gl_FragColor = texture2D(tex, vUv); }`, {tex:{value:null}});
+let SIDE = 0, posRT = [], velRT = [], ping = 0, postReady = false, exporting = false;
+
+// ---- shadow volume ----
+const denRT = rt(512, 512, THREE.HalfFloatType, THREE.NearestFilter);
+const tauRT = rt(512, 512, THREE.HalfFloatType, THREE.LinearFilter);
+const keyU = { uKeyDir:{value:new THREE.Vector3(0.5,-0.7,-0.4).normalize()}, uKeyB1:{value:new THREE.Vector3(1,0,0)}, uKeyB2:{value:new THREE.Vector3(0,1,0)}, uKeyR:{value:2.4} };
+const keyDenRT = rt(1024, 1024, THREE.HalfFloatType, THREE.NearestFilter);
+const keyTauRT = rt(1024, 1024, THREE.HalfFloatType, THREE.LinearFilter);
+const splatU = Object.assign({ tPos:{value:null}, uRmax:{value:RMAX}, uNorm:{value:1}, uMode:{value:0} }, keyU);
+const integKMat = qmat(INTEG_FRAG, {tDen:{value:keyDenRT.texture}});
+const splatMat = new THREE.ShaderMaterial({vertexShader:SPLAT_VERT, fragmentShader:SPLAT_FRAG, uniforms:splatU,
+  blending:THREE.CustomBlending, blendEquation:THREE.AddEquation, blendSrc:THREE.OneFactor, blendDst:THREE.OneFactor, depthTest:false, depthWrite:false, transparent:true});
+const integMat = qmat(INTEG_FRAG, {tDen:{value:denRT.texture}});
+const splatScene = new THREE.Scene();
+let splatPts = null;
+
+// ---- render scene ----
+const shadeU = Object.assign({
+  tPos:{value:null}, tVel:{value:null}, tTau:{value:tauRT.texture}, tKey:{value:keyTauRT.texture}, uRmax:{value:RMAX}, uExt:{value:0.06},
+  uExtK:{value:0.09}, uDebug:{value:0}, uKeyI:{value:2.5}, uKeyCol:{value:new THREE.Vector3(0.93, 0.94, 0.98)},
+  uSun:{value:1}, uHigh:{value:0}, uTime:{value:0},
+  uSize:{value:0.0026}, uScale:{value:1000}, uFocus:{value:4.5}, uAperture:{value:0.01}, uSide:{value:1}, uOriginDepth:{value:5},
+  uStreak:{value:0.05}, uBodySize:{value:5.0}, uBodyA:{value:0.12}, tRest:{value:null}, uEmber:{value:1}, uEmberG:{value:0.35}, uFlowT:{value:0}
+}, keyU);
+const keyDenB = rt(1024, 1024, THREE.HalfFloatType, THREE.LinearFilter), keyDenT = rt(1024, 1024, THREE.HalfFloatType, THREE.NearestFilter);
+const kblurMat = qmat(KBLUR_FRAG, {tex:{value:null}, uDir:{value:new THREE.Vector2()}});
+const volU = Object.assign({}, shadeU, { tKeyDen:{value:keyDenB.texture}, uInvVP:{value:new THREE.Matrix4()}, uCamPos:{value:new THREE.Vector3()}, uSmoke:{value:0.45}, uEyeGlow:{value:0} });
+const volMat = qmat(VOL_FRAG, volU);
+const vcompMat = new THREE.ShaderMaterial({vertexShader:QUAD_VERT, fragmentShader:VCOMP_FRAG, uniforms:{tex:{value:null}}, depthTest:false, depthWrite:false, transparent:true,
+  blending:THREE.CustomBlending, blendEquation:THREE.AddEquation, blendSrc:THREE.OneFactor, blendDst:THREE.OneMinusSrcAlphaFactor});
+const sandMat = new THREE.ShaderMaterial({vertexShader:SAND_VERT, fragmentShader:SAND_FRAG, uniforms:shadeU,
+  transparent:true, depthTest:false, depthWrite:false, blending:THREE.NormalBlending});
+const bodyMat = new THREE.ShaderMaterial({vertexShader:SAND_VERT, fragmentShader:SAND_FRAG, uniforms:shadeU, defines:{BODY:1},
+  transparent:true, depthTest:false, depthWrite:false, blending:THREE.NormalBlending});
+const streakMat = new THREE.ShaderMaterial({vertexShader:STREAK_VERT, fragmentShader:STREAK_FRAG, uniforms:shadeU,
+  transparent:true, depthTest:false, depthWrite:false, blending:THREE.NormalBlending});
+const camera = new THREE.PerspectiveCamera(36, 1, 0.05, 60);
+const sunU = { uTime:shadeU.uTime, uSun:shadeU.uSun, uHigh:shadeU.uHigh, uEye:simU.uEye, uFlash:{value:0} };
+const farScene = new THREE.Scene(), sunScene = new THREE.Scene(), nearScene = new THREE.Scene();
+const sun = new THREE.Mesh(new THREE.PlaneGeometry(3.0, 3.0), new THREE.ShaderMaterial({vertexShader:SUN_VERT, fragmentShader:SUN_FRAG,
+  uniforms:sunU, transparent:true, blending:THREE.AdditiveBlending, depthTest:false, depthWrite:false}));
+sun.frustumCulled = false;   // the old sun disc is kept for reference but no longer drawn
+const fireGeo = new THREE.PlaneGeometry(1, 1);
+const fires = [];
+for(let i=0;i<7;i++){
+  const u = { uTime:shadeU.uTime, uCenter:{value:new THREE.Vector3()}, uSize:{value:1}, uI:{value:0.5}, uSeed:{value:i*7.31} };
+  const m = new THREE.Mesh(fireGeo, new THREE.ShaderMaterial({vertexShader:FIRE_VERT, fragmentShader:FIRE_FRAG, uniforms:u,
+    transparent:true, blending:THREE.AdditiveBlending, depthTest:false, depthWrite:false}));
+  m.frustumCulled = false; sunScene.add(m);
+  const ax = new THREE.Vector3(Math.random()-0.5, Math.random()-0.5, Math.random()-0.5).normalize();
+  const d0 = new THREE.Vector3(Math.random()-0.5, Math.random()-0.5, Math.random()-0.5).normalize();
+  fires.push({ u, ax, d0, r: 0.12 + 0.45*Math.random(), size: 0.9 + 0.8*Math.random(), speed: 0.15 + 0.25*Math.random(), flare: 0, base: 0.35 + 0.4*Math.random() });
+}
+let farPts = null, nearPts = null, streaks = null;
+
+function gauss(){ let u=0,v=0; while(!u)u=Math.random(); while(!v)v=Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
+function buildSim(side){
+  SIDE = side; const n = side*side;
+  posRT.concat(velRT).forEach(t => t.dispose());
+  posRT = [0,1].map(()=>rt(side, side, SIM_TYPE, THREE.NearestFilter));
+  velRT = [0,1].map(()=>rt(side, side, SIM_TYPE, THREE.NearestFilter));
+  const pd = new Float32Array(n*4), vd = new Float32Array(n*4), rd = new Float32Array(n*4), refs = new Float32Array(n*2);
+  const LAYERS = [0.8, 0.9, 0.98, 1.06, 1.14];
+  for(let i=0;i<n;i++){
+    let x=gauss(), y=gauss(), z=gauss(); const l=Math.hypot(x,y,z)||1; x/=l; y/=l; z/=l;
+    const layer = LAYERS[Math.floor(Math.random()*LAYERS.length)] + (Math.random()-0.5)*0.035;
+    rd[i*4]=x; rd[i*4+1]=y; rd[i*4+2]=z; rd[i*4+3]=layer;
+    pd[i*4]=x*layer; pd[i*4+1]=y*layer; pd[i*4+2]=z*layer; pd[i*4+3]=Math.random();
+    vd[i*4+3]=Math.random();
+    refs[i*2]=((i%side)+0.5)/side; refs[i*2+1]=(Math.floor(i/side)+0.5)/side;
+  }
+  const up = d => { const t = new THREE.DataTexture(d, side, side, THREE.RGBAFormat, THREE.FloatType); t.needsUpdate = true; return t; };
+  const tp = up(pd), tv = up(vd);
+  copyMat.uniforms.tex.value = tp; pass(copyMat, posRT[0]); pass(copyMat, posRT[1]);
+  copyMat.uniforms.tex.value = tv; pass(copyMat, velRT[0]); pass(copyMat, velRT[1]);
+  tp.dispose(); tv.dispose(); ping = 0;
+  if(simU.tRest.value) simU.tRest.value.dispose();
+  const tr = up(rd); tr.minFilter = tr.magFilter = THREE.NearestFilter; simU.tRest.value = tr; shadeU.tRest.value = tr;
+
+  [farScene, nearScene, splatScene].forEach(sc => { while(sc.children.length) sc.remove(sc.children[0]); });
+  if(farPts) { farPts.geometry.dispose(); streaks.geometry.dispose(); }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n*3), 3));
+  g.setAttribute('ref', new THREE.BufferAttribute(refs, 2));
+  const mk = (geo, mat, sc) => { const o = new THREE.Points(geo, mat); o.frustumCulled = false; sc.add(o); return o; };
+  // speed at 1M/2M: the grains are randomly ordered, so a slice of them is a fair sample.
+  // Shadows are traced from 262k grains, the soft body from 590k; every grain is still drawn sharp.
+  const sub = m => { const s2 = new THREE.BufferGeometry(); s2.setAttribute('position', g.attributes.position); s2.setAttribute('ref', g.attributes.ref); s2.setDrawRange(0, Math.min(n, m)); return s2; };
+  const gBody = sub(589824), gSplat = sub(262144);
+  mk(gBody, bodyMat, farScene).renderOrder = 0;
+  farPts = mk(g, sandMat, farScene); farPts.renderOrder = 1;
+  mk(gBody, bodyMat, nearScene).renderOrder = 0;
+  nearPts = mk(g, sandMat, nearScene); nearPts.renderOrder = 1;
+  splatPts = mk(gSplat, splatMat, splatScene);
+  // streaks: every grain gets a 2-vertex line from where it was to where it is
+  const sg = new THREE.BufferGeometry();
+  const r2 = new Float32Array(n*4), e2 = new Float32Array(n*2);
+  for(let i=0;i<n;i++){ r2[i*4]=refs[i*2]; r2[i*4+1]=refs[i*2+1]; r2[i*4+2]=refs[i*2]; r2[i*4+3]=refs[i*2+1]; e2[i*2]=0; e2[i*2+1]=1; }
+  sg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n*6), 3));
+  sg.setAttribute('ref', new THREE.BufferAttribute(r2, 2));
+  sg.setAttribute('aEnd', new THREE.BufferAttribute(e2, 1));
+  streaks = new THREE.LineSegments(sg, streakMat); streaks.frustumCulled = false; streaks.renderOrder = 2; nearScene.add(streaks);
+  sg.setDrawRange(0, Math.min(n, 589824)*2);
+  splatU.uNorm.value = 1;
+  if(postReady) resize();
+}
+
+function stepSim(dt){
+  simU.uDt.value = dt;
+  simU.tPos.value = posRT[ping].texture; simU.tVel.value = velRT[ping].texture;
+  pass(velMat, velRT[1-ping]);
+  simU.tVel.value = velRT[1-ping].texture;
+  pass(posMat, posRT[1-ping]);
+  ping = 1 - ping;
+  simU.uKick.value = 0;
+}
+function keyDenBlur(){
+  kblurMat.uniforms.tex.value = keyDenRT.texture; kblurMat.uniforms.uDir.value.set(1/1024, 0); pass(kblurMat, keyDenT);
+  kblurMat.uniforms.tex.value = keyDenT.texture; kblurMat.uniforms.uDir.value.set(0, 1/1024); pass(kblurMat, keyDenB);
+}
+function buildShadow(){
+  splatU.tPos.value = posRT[ping].texture;
+  renderer.setRenderTarget(denRT); renderer.setClearColor(0x000000, 0); renderer.clear();
+  splatU.uMode.value = 0; splatU.uNorm.value = 262144/Math.min(SIDE*SIDE, 262144);
+  renderer.render(splatScene, quadCam);
+  pass(integMat, tauRT);
+  renderer.setRenderTarget(keyDenRT); renderer.clear();
+  splatU.uMode.value = 1; splatU.uNorm.value = 262144/Math.min(SIDE*SIDE, 262144);
+  renderer.render(splatScene, quadCam);
+  pass(integKMat, keyTauRT);
+}
+
+// ---- post targets ----
+let volRT = null;
+let W=1, H=1, sceneRT, trailRT=[], brightRT, raysRT, bl=[], tmp=[], trailPing=0;
+const trailMat = qmat(TRAIL_FRAG, {tCur:{value:null}, tPrev:{value:null}, uPersist:{value:0.35}});
+const brightMat = qmat(BRIGHT_FRAG, {tex:{value:null}, uThresh:{value:1.6}});
+const blurMat = qmat(BLUR_FRAG, {tex:{value:null}, uDir:{value:new THREE.Vector2()}});
+const raysMat = qmat(RAYS_FRAG, {tex:{value:null}, uSunUV:{value:new THREE.Vector2(0.5,0.5)}, uLen:{value:0.55}});
+const finalU = {tScene:{value:null}, tB1:{value:null}, tB2:{value:null}, tB3:{value:null}, tB4:{value:null}, tB5:{value:null}, tRays:{value:null},
+  uTime:shadeU.uTime, uBloom:{value:0.6}, uRays:{value:0.8}, uExposure:{value:1.0}, uRes:{value:new THREE.Vector2()}};
+const finalMat = qmat(FINAL_FRAG, finalU);
+function buildPost(){
+  [sceneRT, brightRT, raysRT, ...trailRT, ...bl, ...tmp].forEach(t => t && t.dispose());
+  sceneRT = rt(W, H, THREE.HalfFloatType);
+  trailRT = [rt(W, H, THREE.HalfFloatType), rt(W, H, THREE.HalfFloatType)];
+  brightRT = rt(W>>1, H>>1, THREE.HalfFloatType);
+  raysRT = rt(W>>2, H>>2, THREE.HalfFloatType);
+  // smoke is soft: march it at reduced resolution (at most ~520k rays), the bloom and upscale hide it
+  const vf = Math.max(2, Math.sqrt(W*H/520000));
+  if(volRT) volRT.dispose(); volRT = rt(Math.max(1, Math.round(W/vf)), Math.max(1, Math.round(H/vf)), THREE.HalfFloatType);
+  bl = []; tmp = [];
+  for(let i=0;i<5;i++){ const w = Math.max(1, W>>(i+2)), h = Math.max(1, H>>(i+2)); bl.push(rt(w,h,THREE.HalfFloatType)); tmp.push(rt(w,h,THREE.HalfFloatType)); }
+  finalU.uRes.value.set(W, H);
+}
+function resize(){
+  if(exporting) return;
+  // fewer screen pixels when there are more grains, so 1M and 2M stay fluid on a laptop
+  const w = window.innerWidth, h = window.innerHeight, pr = Math.min(window.devicePixelRatio||1, SIDE >= 1448 ? 1.5 : 2);
+  renderer.setPixelRatio(pr); renderer.setSize(w, h, false);
+  W = Math.round(w*pr); H = Math.round(h*pr);
+  camera.aspect = w/h; camera.updateProjectionMatrix();
+  shadeU.uScale.value = H;
+  camera.userData.fit = 6.6*Math.max(1, 0.8*h/w);
+  buildPost();
+}
+window.addEventListener('resize', resize); resize(); postReady = true;
+buildSim(768);
+
+/* =====================================================================
+   CHOREOGRAPHY: postures the body eases between; the music decides when
+   ===================================================================== */
+const MOVES = [
+  // Every posture is built from the quiet state: tight, dense, almost no wind. The music only changes how fast it rolls and how the fire glows.
+  { name:'Breath',    radius:0.88, wind:0.16, freq:1.2, swirl:0.9,  spring:8.0, drag:3.3, eye:0.0, lump:0.24, fold:0.09, rise:0.0,  jets:0.0, twist:1.0, stretch:0.10, limbs:0.25, pour:0.05, shapes:[1,3,1] },
+  { name:'Drift',     radius:0.92, wind:0.22, freq:1.3, swirl:1.1,  spring:7.5, drag:3.2, eye:0.0, lump:0.28, fold:0.11, rise:0.05, jets:0.0, twist:1.3, stretch:0.14, limbs:0.30, pour:0.10, shapes:[0,1,5] },
+  { name:'Eye',       radius:0.9,  wind:0.15, freq:1.2, swirl:1.0,  spring:8.0, drag:3.3, eye:1.0, lump:0.24, fold:0.09, rise:0.0,  jets:0.0, twist:0.8, stretch:0.08, limbs:0.25, pour:0.00, shapes:[0] },
+  { name:'Gathering', radius:0.85, wind:0.12, freq:1.4, swirl:1.4,  spring:8.1, drag:3.3, eye:0.0, lump:0.22, fold:0.08, rise:0.0,  jets:0.0, twist:1.6, stretch:0.10, limbs:0.25, pour:0.00, shapes:[6,1] },
+  { name:'Flare',     radius:0.9,  wind:0.2,  freq:1.3, swirl:1.2,  spring:8.0, drag:3.3, eye:0.3, lump:0.26, fold:0.1,  rise:0.0,  jets:0.0, twist:1.4, stretch:0.10, limbs:0.25, pour:0.10, shapes:[0] },
+  { name:'Veil',      radius:0.93, wind:0.2,  freq:1.8, swirl:1.0,  spring:7.5, drag:3.2, eye:0.4, lump:0.28, fold:0.12, rise:0.0,  jets:0.0, twist:1.3, stretch:0.16, limbs:0.30, pour:0.25, shapes:[1,2,0] },
+  { name:'Curtains',  radius:0.92, wind:0.18, freq:1.3, swirl:0.9,  spring:7.5, drag:3.2, eye:0.0, lump:0.26, fold:0.12, rise:-0.15, jets:0.0, twist:1.0, stretch:0.10, limbs:0.25, pour:0.6, shapes:[0,3,1] },
+  { name:'Corona',    radius:0.9,  wind:0.18, freq:1.2, swirl:1.1,  spring:8.0, drag:3.3, eye:0.0, lump:0.26, fold:0.10, rise:0.0,  jets:0.0, twist:1.2, stretch:0.12, limbs:0.35, pour:0.05, shapes:[1,4,0] },
+];
+const NUM = ['I','II','III','IV','V','VI','VII','VIII'];
+let moveIdx = 2, moveTime = 0, flowT = 0, flowSpeed = 0.6;
+const cur = Object.assign({}, MOVES[2]);
+// ---- beings: which figure the sand is finding, and how far it has morphed into the next one ----
+const being = { a:0, b:0, morph:0, free:0.25, armL:0.3, armR:0.3, vL:0, vR:0, tL:0.3, tR:0.3, lastBeat:0, period:0.625 };
+function wantShape(id){
+  if(id === being.b) return;
+  if(being.morph > 0.5) being.a = being.b;   // mid-morph: continue from whichever form dominates
+  being.b = id; being.morph = 0;
+  if(being.a === id) being.morph = 0;
+}
+const POSES = [[0.15,0.15],[0.2,2.6],[2.6,0.2],[1.4,1.4],[0.6,2.0],[2.0,0.6],[1.0,0.1],[2.8,2.8]];
+let curShape = 0, shapeClock = 0;
+function setMove(i){
+  moveIdx = (i + MOVES.length) % MOVES.length; moveTime = 0;
+  const sh = MOVES[moveIdx].shapes; curShape = sh[Math.floor(Math.random()*sh.length)]; shapeClock = 0;
+  if(window.__rdLog) window.__rdLog('move ' + MOVES[moveIdx].name + ' at ' + T.toFixed(2));
+  $('move').innerHTML = NUM[moveIdx] + ' · <b>' + MOVES[moveIdx].name + '</b>';
+}
+function nextMove(reason){
+  if(reason === 'drop'){ A.kick = Math.max(A.kick, 2.5); return setMove(4); }
+  if(reason === 'quiet') return setMove(3);
+  let n; do { n = Math.floor(Math.random()*MOVES.length); } while(n === moveIdx || n === 3 || n === 4);
+  setMove(n);
+}
+
+/* =====================================================================
+   AUDIO
+   ===================================================================== */
+let actx = null, analyser = null, freq = null, src = null, demoTimer = null;
+function ensureCtx(){
+  if(!actx){
+    actx = new (window.AudioContext||window.webkitAudioContext)();
+    analyser = actx.createAnalyser(); analyser.fftSize = 2048; analyser.smoothingTimeConstant = 0.45;
+    freq = new Uint8Array(analyser.frequencyBinCount);
+  }
+  if(actx.state === 'suspended') actx.resume();
+  return actx;
+}
+function stopAll(){
+  if(demoTimer){ clearInterval(demoTimer); demoTimer = null; }
+  if(src){ try{ src.stop && src.stop(); }catch(e){} try{ src.node.disconnect(); }catch(e){} src = null; }
+  ['bDemo','bMic'].forEach(id => $(id).classList.remove('on'));
+}
+function startDemo(){
+  const ctx = ensureCtx(); stopAll();
+  const out = ctx.createGain(); out.gain.value = 0.8; out.connect(analyser); out.connect(ctx.destination);
+  const nb = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate); const nd = nb.getChannelData(0); for(let i=0;i<nd.length;i++) nd[i]=Math.random()*2-1;
+  const lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=900; lp.Q.value=4;
+  const pg = ctx.createGain(); pg.gain.value = 0.05; lp.connect(pg); pg.connect(out);
+  const oscs = [110,130.81,164.81,220,329.63].map((f,i)=>{ const o=ctx.createOscillator(); o.type='sawtooth'; o.frequency.value=f; o.detune.value=(i-2)*6; o.connect(lp); o.start(); return o; });
+  const lfo = ctx.createOscillator(); lfo.frequency.value=0.06; const lg=ctx.createGain(); lg.gain.value=700; lfo.connect(lg); lg.connect(lp.frequency); lfo.start();
+  const step = 60/96/4; let next = ctx.currentTime+0.1, n = 0;
+  const kick = t => { const o=ctx.createOscillator(), g=ctx.createGain(); o.frequency.setValueAtTime(150,t); o.frequency.exponentialRampToValueAtTime(42,t+0.14); g.gain.setValueAtTime(1,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.5); o.connect(g); g.connect(out); o.start(t); o.stop(t+0.55); };
+  const noise = (t,type,f,vol,dur) => { const s=ctx.createBufferSource(); s.buffer=nb; const fl=ctx.createBiquadFilter(); fl.type=type; fl.frequency.value=f; const g=ctx.createGain(); g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.001,t+dur); s.connect(fl); fl.connect(g); g.connect(out); s.start(t); s.stop(t+dur+0.02); };
+  const tick = () => { while(next < ctx.currentTime+0.12){
+    const s = n%16, bar = Math.floor(n/16)%8, brk = bar>=6;
+    if(!brk && (s===0||s===8||(bar%2&&s===11))) kick(next);
+    if(!brk && (s===4||s===12)) noise(next,'bandpass',1800,0.35,0.18);
+    if(s%2===0||bar>=4) noise(next,'highpass',7500,(s%4===2?0.22:0.09)*(brk?1.6:1),0.045);
+    next += step; n++; } };
+  demoTimer = setInterval(tick, 25); tick();
+  src = { node: out, stop(){ oscs.forEach(o=>o.stop()); lfo.stop(); } };
+  $('bDemo').classList.add('on'); status('Demo beat, 96 bpm. Every 8 bars it goes quiet, then drops.');
+}
+function startFile(file){
+  lastFile = file;
+  const ctx = ensureCtx(); stopAll();
+  const el = document.createElement('audio'); el.src = URL.createObjectURL(file); el.loop = true;
+  const node = ctx.createMediaElementSource(el); node.connect(analyser); node.connect(ctx.destination);
+  el.play().then(()=>status('Playing ' + file.name)).catch(()=>status('This file could not be played. Try mp3, m4a, wav or mp4.'));
+  src = { node, stop(){ el.pause(); URL.revokeObjectURL(el.src); } };
+}
+async function startMic(){
+  const ctx = ensureCtx(); stopAll();
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false, noiseSuppression:false, autoGainControl:false}});
+    const node = ctx.createMediaStreamSource(stream); node.connect(analyser);
+    src = { node, stop(){ stream.getTracks().forEach(t=>t.stop()); } };
+    $('bMic').classList.add('on'); status('Listening to the microphone.');
+  }catch(e){ status('The microphone is blocked on this page. Load a file instead, or open the downloaded copy in Chrome to use the mic.'); }
+}
+$('bDemo').onclick = startDemo; $('bMic').onclick = startMic;
+$('bStop').onclick = () => { stopAll(); status('Stopped. It keeps breathing on its own.'); };
+$('fileIn').onchange = e => { const f = e.target.files[0]; if(f) startFile(f); e.target.value=''; };
+
+// band energy with adaptive ceilings + onset detection (spectral flux on the bass)
+const BANDS = { bass:[25,150], mid:[400,2200], high:[4000,12000] };
+const ceil = { bass:.3, mid:.3, high:.3 }, env = { bass:0, mid:0, high:0 }, raw = { bass:0, mid:0, high:0 };
+let lastFile = null, offline = null;
+let fluxAvg = 0.02, lastKick = -9, loudAvg = 0.3, quietFor = 0, kicksInMove = 0;
+function band(name){
+  const [lo,hi] = BANDS[name], hz = offline ? offline.sr/2048 : actx.sampleRate/analyser.fftSize;
+  const a = Math.max(1, Math.floor(lo/hz)), b = Math.min(freq.length-1, Math.ceil(hi/hz));
+  let s=0; for(let i=a;i<=b;i++) s+=freq[i]; const r = s/((b-a+1)*255);
+  ceil[name] = Math.max(r, ceil[name]*0.998, 0.1);
+  const v = Math.pow(r/ceil[name], 2.0);
+  const prev = raw[name]; raw[name] = v;
+  env[name] += (v-env[name])*(v>env[name] ? 0.5 : 0.08);
+  return v - prev;
+}
+// dance state: limbs thrown on kicks, a ripple from the impact point
+const lobeDirs = [0,1,2,3].map(() => new THREE.Vector3()), lobeAmp = [0,0,0,0];
+let lobeNext = 0, ripAge = 9, ripAmp = 0;
+const randDir = v => { do { v.set(Math.random()*2-1, Math.random()*2-1, Math.random()*2-1); } while(v.lengthSq() > 1 || v.lengthSq() < 0.05); return v.normalize(); };
+function fireKick(strength){
+  for(let n=0;n<2;n++){ const f = fires[Math.floor(Math.random()*fires.length)]; f.flare = Math.min(3.0, f.flare + strength*0.9); }
+}
+function danceKick(strength){
+  // arms take a new pose on the kick; the beat period is learned from kick spacing for the wings
+  const ps = POSES[Math.floor(Math.random()*POSES.length)]; being.tL = ps[0]; being.tR = ps[1];
+  const gap = T - being.lastBeat; if(gap > 0.28 && gap < 1.3) being.period += (gap - being.period)*0.3; being.lastBeat = T;
+  fireKick(strength);
+  const i = lobeNext++ % 4;
+  randDir(lobeDirs[i]);
+  lobeAmp[i] = Math.min(0.5, (0.3 + strength*0.3)*cur.limbs);
+  ripAge = 0; ripAmp = Math.min(1.5, strength); simU.uRipDir.value.copy(lobeDirs[i]);
+}
+function onKick(strength, t){
+  danceKick(strength);
+  lastKick = t; A.kick = Math.max(A.kick, Math.min(1.5, strength)); kicksInMove++;
+  if(quietFor > 1.6){ nextMove('drop'); kicksInMove = 0; }
+  else if(kicksInMove >= 16 && moveTime > 6){ nextMove(); kicksInMove = 0; }
+  quietFor = 0;
+}
+function listen(dt, t){
+  if(window.__rdFake) return window.__rdFake(dt, t, A, onKick, v => { quietFor = v; }, () => quietFor);
+  if(offline) offline.fill(t);
+  else { if(!(analyser && src)) return false; analyser.getByteFrequencyData(freq); }
+  const flux = Math.max(0, band('bass')); band('mid'); band('high');
+  fluxAvg += (flux - fluxAvg)*0.05;
+  const loud = (env.bass + env.mid + env.high)/3;
+  loudAvg += (loud - loudAvg)*0.01;
+  if(flux > Math.max(0.12, fluxAvg*3.2) && t - lastKick > 0.18) onKick(0.45 + flux*2.0, t);
+  if(loud < loudAvg*0.55){ quietFor += dt; if(quietFor > 1.6 && moveIdx !== 3) setMove(3); }
+  else if(t - lastKick > 1.0) quietFor = Math.max(0, quietFor - dt);
+  A.bass = env.bass; A.mid = env.mid; A.high = env.high;
+  return true;
+}
+
+/* =====================================================================
+   INTERACTION
+   ===================================================================== */
+let yaw = 0.0, pitch = 0.08, zoom = 1, drag = null, drift = 0;
+canvas.addEventListener('pointerdown', e => { drag = {x:e.clientX, y:e.clientY}; canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener('pointermove', e => { if(!drag) return; yaw -= (e.clientX-drag.x)*0.005; pitch = Math.max(-1.2, Math.min(1.2, pitch + (e.clientY-drag.y)*0.005)); drag = {x:e.clientX, y:e.clientY}; });
+canvas.addEventListener('pointerup', () => drag = null);
+canvas.addEventListener('wheel', e => { e.preventDefault(); zoom = Math.max(0.4, Math.min(1.8, zoom*(1 + e.deltaY*0.001))); }, {passive:false});
+window.addEventListener('keydown', e => { if((e.key==='h'||e.key==='H') && !/INPUT|SELECT/.test(document.activeElement.tagName)) document.body.classList.toggle('hide-ui'); });
+const S = { bass:1, wind:1, sun:1, dof:1, dens:1 };
+$('sBass').oninput = e => S.bass = +e.target.value;
+$('sCurl').oninput = e => S.wind = +e.target.value;
+$('sSun').oninput = e => S.sun = +e.target.value;
+$('sDof').oninput = e => S.dof = +e.target.value;
+$('sShadow').oninput = e => S.dens = +e.target.value;
+$('sSmoke').oninput = e => volU.uSmoke.value = +e.target.value;
+$('sRays').oninput = e => finalU.uRays.value = +e.target.value;
+$('sTrail').oninput = e => trailMat.uniforms.uPersist.value = +e.target.value;
+$('sCount').onchange = e => buildSim(+e.target.value);
+
+/* =====================================================================
+   FRAME
+   ===================================================================== */
+const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+let T = 0, flash = 0;
+const camPos = new THREE.Vector3(), tmpV = new THREE.Vector3();
+const jetSeeds = [0,1,2].map(i => new THREE.Vector3(Math.random()-0.5, Math.random()-0.5, Math.random()-0.5).normalize());
+
+function update(dt){
+  T += dt; moveTime += dt;
+  simU.uTime.value = T; shadeU.uTime.value = T;
+  const heard = listen(dt, T);
+  if(!heard){
+    // alone, it breathes: an irregular double pulse, like something asleep
+    const b = Math.pow(0.5 + 0.5*Math.sin(T*1.1), 3.0)*0.35 + Math.pow(0.5 + 0.5*Math.sin(T*1.1 - 0.9), 6.0)*0.25;
+    A.bass = b; A.mid = 0.25 + 0.15*Math.sin(T*0.31); A.high = 0.2 + 0.15*Math.sin(T*0.23 + 1.0);
+    if(moveTime > 12) nextMove();
+  }
+  // a supernova is a moment, not a state: after a few seconds the star falls back in on itself
+  if(moveIdx === 4 && moveTime > 3.0) setMove(6);
+  const tgt = MOVES[moveIdx], k = 1 - Math.exp(-dt*0.9);
+  for(const key in tgt) if(typeof tgt[key] === 'number' && key !== 'shapes') cur[key] += (tgt[key] - cur[key])*k;
+
+  simU.uRadius.value = cur.radius; simU.uWind.value = cur.wind*S.wind; simU.uFreq.value = cur.freq;
+  // beings: morph toward the movement's figure, then let it move to the music
+  // within a move the sand keeps changing who it is: every ~7 s it finds another figure (mostly human dancers)
+  shapeClock += dt;
+  if(shapeClock > 7.0 && moveIdx !== 4){ shapeClock = 0; const sh = MOVES[moveIdx].shapes; if(sh.length > 1){ let n; do { n = sh[Math.floor(Math.random()*sh.length)]; } while(n === curShape && Math.random() < 0.8); curShape = n; } }
+  wantShape(curShape);
+  if(being.a !== being.b){ being.morph = Math.min(1, being.morph + dt/1.8); if(being.morph >= 1){ being.a = being.b; being.morph = 0; } }
+  const tgtFree = curShape === 0 ? 1 : 0.08; being.free += (tgtFree - being.free)*(1 - Math.exp(-dt*1.2));
+  const kA = 26, dA = 7;    // springy limbs: snap toward the pose, overshoot a little, settle
+  being.vL += ((being.tL - being.armL)*kA - being.vL*dA)*dt; being.armL += being.vL*dt;
+  being.vR += ((being.tR - being.armR)*kA - being.vR*dA)*dt; being.armR += being.vR*dt;
+  if(!heard && Math.random() < dt*0.5){ const ps = POSES[Math.floor(Math.random()*POSES.length)]; being.tL = ps[0]; being.tR = ps[1]; }
+  const beatPh = heard ? (T - being.lastBeat)/being.period : T/1.4;
+  const flap = Math.cos(beatPh*Math.PI*2)*(0.35 + A.bass*0.15);
+  simU.uShapeA.value = being.a; simU.uShapeB.value = being.b; simU.uMorph.value = being.morph*being.morph*(3 - 2*being.morph);
+  simU.uFree.value = being.free; simU.uShapeScale.value = cur.radius*1.3;
+  simU.uPose.value.set(being.armL, being.armR, flap, 0.45*Math.sin(T*0.37) + A.mid*0.25);
+  simU.uPose2.value.set(Math.sin(T*0.8)*(0.6 + A.bass), A.bass*0.8 + 0.3*Math.sin(T*1.3), T*0.9, 0);
+  simU.uSwirl.value = cur.swirl*(1 + A.mid*0.25); simU.uSpring.value = cur.spring; simU.uDrag.value = cur.drag;
+  simU.uEye.value = cur.eye*(0.8 + A.bass*0.2); simU.uLump.value = cur.lump; simU.uFold.value = cur.fold; simU.uPour.value = cur.pour*(0.8 + 0.4*Math.sin(T*0.5)); simU.uRise.value = cur.rise; simU.uJets.value = cur.jets;
+  simU.uBass.value = A.bass*S.bass; simU.uMid.value = A.mid; simU.uHigh.value = A.high;
+  // a hit is a flash of the fire behind the sand (about 1/6 s), not a blast
+  if(A.kick > 0){ simU.uKick.value = A.kick*S.bass; flash = Math.max(flash, Math.min(1.2, A.kick*S.bass)); A.kick = 0; }
+  flash *= Math.exp(-dt*9.0);
+  // flow speed: the music pushes the rolling faster; integrated, so it speeds up and slows down smoothly
+  flowSpeed += ((0.4 + A.mid*0.5 + A.bass*0.25 + (moveIdx === 4 ? 0.4 : 0)) - flowSpeed)*(1 - Math.exp(-dt*0.8));
+  flowT += dt*flowSpeed; simU.uFlowT.value = flowT;
+  simU.uRollAxis.value.set(Math.sin(T*0.031), 1.0, Math.cos(T*0.023)*0.6).normalize();
+  simU.uAxis.value.set(Math.sin(T*0.13)*0.6, 1.0, Math.cos(T*0.09)*0.5).normalize();
+  // the twist swings back and forth like a dancer's torso; mids push it further
+  simU.uTwist.value = cur.twist*(Math.sin(T*0.21) + 0.5*Math.sin(T*0.53 + 1.3))*(0.85 + A.mid*0.3);
+  simU.uStretch.value = cur.stretch*(Math.sin(T*0.61) + 0.4*Math.sin(T*1.7)) + A.bass*0.015;
+  simU.uStrAxis.value.set(Math.sin(T*0.11 + 2.0), Math.cos(T*0.07), Math.sin(T*0.05)).normalize();
+  for(let i=0;i<4;i++) lobeAmp[i] *= Math.exp(-dt*0.8);
+  if(!heard && Math.random() < dt*0.6) danceKick(0.5 + Math.random()*0.5);   // alone, it still makes gestures
+  simU.uLobe0.value.copy(lobeDirs[0]); simU.uLobe1.value.copy(lobeDirs[1]); simU.uLobe2.value.copy(lobeDirs[2]); simU.uLobe3.value.copy(lobeDirs[3]);
+  simU.uLobeAmp.value.set(lobeAmp[0], lobeAmp[1], lobeAmp[2], lobeAmp[3]);
+  ripAge += dt; simU.uRipAge.value = ripAge; simU.uRipAmp.value = ripAmp;
+  [simU.uJet0, simU.uJet1, simU.uJet2].forEach((u, i) => {
+    const s = jetSeeds[i], a = T*(0.05 + i*0.02);
+    u.value.set(s.x*Math.cos(a) - s.z*Math.sin(a), s.y + 0.3*Math.sin(T*0.07 + i), s.x*Math.sin(a) + s.z*Math.cos(a)).normalize();
+  });
+  // fire patches orbit inside the body, swell with the bass, flare on hits; the supernova sets them all ablaze
+  let fireSum = 0;
+  fires.forEach((f, i) => {
+    f.flare *= Math.exp(-dt*2.2);
+    const a = T*f.speed + i;
+    const c = f.d0.clone().applyAxisAngle(f.ax, a).multiplyScalar(f.r*cur.radius*(1 + 0.25*Math.sin(T*0.7 + i)));
+    f.u.uCenter.value.copy(c);
+    f.u.uSize.value = 0.7*f.size*cur.radius*(1 + A.bass*0.15 + flash*0.25);
+    const I = ((f.base*(0.22 + A.high*0.3) + f.flare*0.25)*0.5 + flash*(0.22 + f.base*0.35))*0.4;
+    f.u.uI.value = I*S.sun; fireSum += I;
+  });
+  shadeU.uHigh.value = A.high;
+  shadeU.uSun.value = S.sun*(0.22 + fireSum/7*1.75 + flash*0.35);
+  shadeU.uEmber.value = S.sun*(0.55 + A.high*0.5 + flash*1.6);
+  shadeU.uEmberG.value = shadeU.uEmber.value*0.35;   // grains only carry a few sparks; the smoke carries the fire
+  shadeU.uFlowT.value = flowT;
+  volU.uEyeGlow.value += (cur.eye*0.9 - volU.uEyeGlow.value)*(1 - Math.exp(-dt*0.8));
+  sunU.uFlash.value = flash;
+  shadeU.uExt.value = 0.06*S.dens;
+
+  if(!drag) drift = 0.55*Math.sin(T*0.045);   // the camera sways in front of the figure instead of circling it
+  const open = 0.42 + 0.58*(1 - Math.exp(-T*0.45));   // opening shot: close on the eye, slowly pulling back
+  const d = camera.userData.fit*zoom*open*(1 + 0.05*Math.sin(T*0.17)), y = yaw + drift, p = pitch + 0.08*Math.sin(T*0.11);
+  camPos.set(Math.sin(y)*Math.cos(p)*d, Math.sin(p)*d, Math.cos(y)*Math.cos(p)*d);
+  camera.position.copy(camPos); camera.lookAt(0, 0, 0); camera.updateMatrixWorld();
+  simU.uCamDir.value.copy(camPos).normalize();
+  // key light rides with the camera: from upper left, slightly behind the viewer
+  { const fwd = tmpV.copy(camPos).normalize(), right = new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0), fwd).normalize(), up = new THREE.Vector3().crossVectors(fwd, right);
+    const src = right.clone().multiplyScalar(-0.75).add(up.clone().multiplyScalar(0.85)).add(fwd.clone().multiplyScalar(0.35)).normalize();
+    keyU.uKeyDir.value.copy(src).negate();
+    keyU.uKeyB1.value.copy(right.cross(keyU.uKeyDir.value)).normalize(); keyU.uKeyB2.value.crossVectors(keyU.uKeyDir.value, keyU.uKeyB1.value).normalize(); }
+  shadeU.uFocus.value = d - 0.3; shadeU.uAperture.value = 0.006*S.dof; shadeU.uOriginDepth.value = d;
+
+  stepSim(dt);
+}
+
+function render(){
+  buildShadow();
+  shadeU.tPos.value = posRT[ping].texture; shadeU.tVel.value = velRT[ping].texture;
+  renderer.setRenderTarget(sceneRT); renderer.setClearColor(0x000000, 1); renderer.clear();
+  shadeU.uSide.value = 1;  renderer.render(farScene, camera);   // sand behind the sun
+  // the smoke volume, half resolution, laid over the far sand
+  keyDenBlur();
+  camera.updateMatrixWorld(); volU.uInvVP.value.multiplyMatrices(camera.matrixWorld, camera.projectionMatrixInverse); volU.uCamPos.value.copy(camera.position);
+  pass(volMat, volRT);
+  vcompMat.uniforms.tex.value = volRT.texture; pass(vcompMat, sceneRT);
+  shadeU.uSide.value = -1; renderer.render(nearScene, camera);  // sand in front + streaks
+
+  // trails
+  trailMat.uniforms.tCur.value = sceneRT.texture; trailMat.uniforms.tPrev.value = trailRT[trailPing].texture;
+  pass(trailMat, trailRT[1-trailPing]); trailPing = 1 - trailPing;
+  const img = trailRT[trailPing].texture;
+  // bloom pyramid
+  brightMat.uniforms.tex.value = img; pass(brightMat, brightRT);
+  let s = brightRT;
+  for(let i=0;i<5;i++){
+    blurMat.uniforms.tex.value = s.texture; blurMat.uniforms.uDir.value.set(1/bl[i].width, 0); pass(blurMat, tmp[i]);
+    blurMat.uniforms.tex.value = tmp[i].texture; blurMat.uniforms.uDir.value.set(0, 1/bl[i].height); pass(blurMat, bl[i]);
+    s = bl[i];
+  }
+  // light shafts radiate from the sun's position on screen, through the gaps the sand leaves
+  tmpV.set(0,0,0).project(camera);
+  raysMat.uniforms.uSunUV.value.set(tmpV.x*0.5+0.5, tmpV.y*0.5+0.5);
+  raysMat.uniforms.tex.value = brightRT.texture; pass(raysMat, raysRT);
+  finalU.tScene.value = img;
+  finalU.tB1.value = bl[0].texture; finalU.tB2.value = bl[1].texture; finalU.tB3.value = bl[2].texture; finalU.tB4.value = bl[3].texture; finalU.tB5.value = bl[4].texture;
+  finalU.tRays.value = raysRT.texture;
+  pass(finalMat, null);
+}
+
+
+/* =====================================================================
+   EXPORT: offline, frame-accurate film. The track is decoded, analysed
+   exactly like the live analyser (Blackman FFT 2048, smoothing 0.45,
+   -100..-30 dB), the sim steps at a fixed 60 Hz, each frame is encoded
+   with WebCodecs (H.264, high bitrate) and muxed with the music to MP4.
+   ===================================================================== */
+function makeAnalysis(mono, sr, t0){
+  const N = 2048, win = new Float32Array(N), re = new Float32Array(N), im = new Float32Array(N), sm = new Float32Array(N/2);
+  for(let i=0;i<N;i++){ const a = 2*Math.PI*i/(N-1); win[i] = 0.42 - 0.5*Math.cos(a) + 0.08*Math.cos(2*a); }
+  const rev = new Uint32Array(N); for(let i=0,b=Math.log2(N);i<N;i++){ let r=0; for(let k=0;k<b;k++) r |= ((i>>k)&1) << (b-1-k); rev[i]=r; }
+  function fft(){
+    for(let size=2; size<=N; size<<=1){
+      const h = size>>1, st = -2*Math.PI/size;
+      for(let i=0;i<N;i+=size) for(let j=0;j<h;j++){
+        const c = Math.cos(st*j), s2 = Math.sin(st*j), a = i+j, b = a+h;
+        const tr = re[b]*c - im[b]*s2, ti = re[b]*s2 + im[b]*c;
+        re[b] = re[a]-tr; im[b] = im[a]-ti; re[a] += tr; im[a] += ti;
+      }
+    }
+  }
+  return { sr, fill(t){
+    if(!freq) freq = new Uint8Array(1024);
+    const end = Math.floor((t + t0)*sr);
+    for(let i=0;i<N;i++){ const k = end - N + i; re[rev[i]] = (k >= 0 && k < mono.length ? mono[k] : 0)*win[i]; im[rev[i]] = 0; }
+    fft();
+    for(let k=0;k<N/2;k++){
+      sm[k] = 0.45*sm[k] + 0.55*Math.hypot(re[k], im[k])/N;
+      const db = 20*Math.log10(sm[k] + 1e-12);
+      freq[k] = Math.max(0, Math.min(255, Math.round(255*(db + 100)/70)));
+    }
+  }};
+}
+let cancelExport = false;
+$('bCancel').onclick = () => { cancelExport = true; };
+const loadScript = url => new Promise((ok, no) => { const e = document.createElement('script'); e.src = url; e.onload = ok; e.onerror = no; document.head.appendChild(e); });
+async function exportFilm(){
+  if(!lastFile){ status('Load an audio file first, then render the film.'); return; }
+  if(!('VideoEncoder' in window)){ status('This browser cannot encode video. Use Chrome, Edge or Safari 17+.'); return; }
+  const [ew, eh] = $('xRes').value.split('x').map(Number), fps = +$('xFps').value;
+  status('Preparing the film…');
+  try{ if(!window.Mp4Muxer) await loadScript('lib/mp4-muxer.js'); }
+  catch(e){ status('Could not load the video muxer. Check your connection.'); return; }
+  const ctx = ensureCtx(); stopAll();
+  const buf = await ctx.decodeAudioData(await lastFile.arrayBuffer());
+  const t0 = Math.min(Math.max(0, +$('xStart').value || 0), Math.max(0, buf.duration - 1));
+  const want = +$('xDur').value, dur = want ? Math.min(want, buf.duration - t0) : buf.duration - t0;
+  const ch = Math.min(2, buf.numberOfChannels), sr = buf.sampleRate;
+  const mono = new Float32Array(buf.length);
+  for(let c=0;c<ch;c++){ const d = buf.getChannelData(c); for(let i=0;i<d.length;i++) mono[i] += d[i]/ch; }
+
+  // codec: H.264 high profile, level high enough for 4K at 60
+  const bitrate = ew*eh*fps*0.32;
+  let vcfg = null;
+  for(const codec of ['avc1.640034','avc1.640033','avc1.64002A']){
+    const c = { codec, width:ew, height:eh, bitrate, framerate:fps, latencyMode:'quality', avc:{format:'avc'} };
+    try{ if((await VideoEncoder.isConfigSupported(c)).supported){ vcfg = c; break; } }catch(e){}
+  }
+  if(!vcfg){ status('This size is too big for this browser\'s encoder. Try 1080×1350.'); return; }
+  let acfg = null;
+  if('AudioEncoder' in window){
+    const c = { codec:'mp4a.40.2', sampleRate:sr, numberOfChannels:ch, bitrate:256000 };
+    try{ if((await AudioEncoder.isConfigSupported(c)).supported) acfg = c; }catch(e){}
+  }
+  const target = new Mp4Muxer.ArrayBufferTarget();
+  const muxer = new Mp4Muxer.Muxer({ target, fastStart:'in-memory', firstTimestampBehavior:'offset',
+    video:{ codec:'avc', width:ew, height:eh, frameRate:fps }, audio: acfg ? { codec:'aac', numberOfChannels:ch, sampleRate:sr } : undefined });
+  let encErr = null;
+  const venc = new VideoEncoder({ output:(k, m) => muxer.addVideoChunk(k, m), error:e => encErr = e });
+  venc.configure(vcfg);
+
+  // take over the renderer at the film's size; start the piece from its opening
+  exporting = true; cancelExport = false; $('bExport').disabled = true; $('bCancel').hidden = false;
+  const keep = { pr: renderer.getPixelRatio(), W, H, yaw, pitch, zoom };
+  renderer.setPixelRatio(1); renderer.setSize(ew, eh, false); canvas.style.width = '100%'; canvas.style.height = '100%';
+  W = ew; H = eh; camera.aspect = ew/eh; camera.updateProjectionMatrix(); shadeU.uScale.value = eh;
+  camera.userData.fit = 6.6*Math.max(1, 0.8*eh/ew); buildPost();
+  buildSim(SIDE); T = 0; flowT = 0; flash = 0; setMove(2); Object.assign(cur, MOVES[2]);
+  offline = makeAnalysis(mono, sr, t0);
+  const sub = fps === 30 ? 2 : 1, frames = Math.round(dur*fps), started = performance.now();
+  try{
+    for(let i=0;i<frames && !cancelExport && !encErr;i++){
+      for(let k=0;k<sub;k++) update(1/60);
+      render();
+      const vf = new VideoFrame(canvas, { timestamp: Math.round(i*1e6/fps), duration: Math.round(1e6/fps) });
+      venc.encode(vf, { keyFrame: i % (fps*2) === 0 }); vf.close();
+      while(venc.encodeQueueSize > 3) await new Promise(r => setTimeout(r, 1));
+      if(i % 10 === 0){
+        const el = (performance.now() - started)/1000, left = el/(i+1)*(frames-i-1);
+        status('Rendering film: frame ' + (i+1) + ' / ' + frames + ' · about ' + Math.ceil(left/60) + ' min left');
+        await new Promise(r => setTimeout(r, 0));
+      }
+    }
+    await venc.flush(); venc.close();
+    if(cancelExport) throw new Error('cancelled');
+    if(encErr) throw encErr;
+    if(acfg){
+      status('Adding the music…');
+      const aenc = new AudioEncoder({ output:(k, m) => muxer.addAudioChunk(k, m), error:e => encErr = e });
+      aenc.configure(acfg);
+      const s0 = Math.floor(t0*sr), total = Math.floor(dur*sr), step = 4096;
+      for(let o=0;o<total;o+=step){
+        const n = Math.min(step, total - o), data = new Float32Array(n*ch);
+        for(let c=0;c<ch;c++) data.set(buf.getChannelData(c).subarray(s0+o, s0+o+n), c*n);
+        const ad = new AudioData({ format:'f32-planar', sampleRate:sr, numberOfFrames:n, numberOfChannels:ch, timestamp:Math.round(o*1e6/sr), data });
+        aenc.encode(ad); ad.close();
+      }
+      await aenc.flush(); aenc.close();
+    }
+    muxer.finalize();
+    const blob = new Blob([target.buffer], { type:'video/mp4' });
+    const name = 'resonant-dust-' + ew + 'x' + eh + '-' + fps + 'fps.mp4';
+    const dl = window.claude && window.claude.use ? await window.claude.use('downloads') : null;
+    if(dl){
+      try{ await dl.save({ filename:name, data:blob }); status('Film saved: ' + name + (acfg ? '' : ' (no sound: add the track in your editor)')); }
+      catch(e){ status(e && e.code === 'declined' ? 'Save cancelled.' : 'Could not save the film here (' + (e && e.code || 'error') + ').'); }
+    } else {
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove();
+      status('Film saved: ' + name + (acfg ? '' : ' (no sound: add the track in your editor)'));
+    }
+  }catch(e){
+    status(cancelExport ? 'Render cancelled.' : 'The render stopped: ' + (e && e.message || e));
+    try{ venc.close(); }catch(_){}
+  }finally{
+    offline = null; exporting = false; $('bExport').disabled = false; $('bCancel').hidden = true;
+    canvas.style.width = ''; canvas.style.height = '';
+    resize();
+  }
+}
+$('bExport').onclick = exportFilm;
+
+// manual stepping for offline testing; normal viewers run the animation loop
+window.__rd = { setShape: id => { curShape = id; being.a = id; being.b = id; being.morph = 0; }, update, render, setMove, buildSim, S, shadeU, simU, finalU, A, MOVES, cur, being, get T(){ return T; } };
+let last = performance.now(), fpsAcc = 0, fpsN = 0;
+function loop(now){
+  requestAnimationFrame(loop);
+  if(exporting){ last = now; return; }
+  const dt = Math.min((now - last)/1000, 1/30)*(reduced ? 0.4 : 1); last = now;
+  fpsAcc += dt; fpsN++; if(fpsAcc > 1){ $('fps').textContent = Math.round(fpsN/fpsAcc) + ' fps · ' + (SIDE*SIDE/1000|0) + 'k grains'; fpsAcc = 0; fpsN = 0; }
+  update(dt); render();
+  $('mB').style.width = Math.min(100, A.bass*100)+'%'; $('mM').style.width = Math.min(100, A.mid*100)+'%'; $('mH').style.width = Math.min(100, A.high*100)+'%';
+}
+if(!window.__RD_MANUAL) requestAnimationFrame(loop);
+})();
+</script>
+</body></html>
